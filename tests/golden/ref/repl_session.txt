@@ -1,0 +1,268 @@
+rc=0
+--stdout--
+==============================================================================
+TRITHEMIUS — LIBER PRIMUS CRYPTANALYTIC WORKSTATION [TERMINAL CORE]
+Model: SparkLLM/Spark-X2.5-4B | Chunks: 143 | Corpus: 104 files | Boost: OFF
+==============================================================================
+Tip: Type '/help' for full command manual or '/help <cmd>' for focused guide.
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> 
++--- [GEMATRIA PRIMUS ARITHMETIC] -----------------------------------------
+| Input Text:      ᚹᛖᛚᚳᚩᛗᛖ
+| Futhorc Runes:   ᚹᛖᛚᚳᚩᛗᛖ
+| Decoded Latin:   WELCOME
+| Prime Sum:       317 (Euler Totient phi: 316, Is Prime: True)
+| Prime Factors:   [317]
+| Atbash Runes:    ᛝᛁᚻᛞᚫᚾᛁ
+| Atbash Latin:    INGIHDAENI
+| Word Breakdown:
+|   ᚹᛖᛚᚳᚩᛗᛖ (WELCOME) -> Prime Sum: 317 (Prime: True)
++--------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> 
++--- [LIBER PRIMUS PAGE 56] ----------------------------------------
+| Document: page_56_loss_of_innocence.md
+| Total Lines: 16
+| Preview:
+# Page 56: Loss of Innocence
+# Status: Solved
+# Cipher: Rune Vigenere (mod 29)
+# Key: DIVINITY
+
+## Rune Transcription
+ᛋᚩᛗᛖ᛫ᚹᛁᛋᛞᚩᛗ᛬
+ᚦᛖ᛫ᛈᚱᛁᛗᛖᛋ᛫ᚪᚱᛖ᛫ᛋᚪᚳᚱᛖᛞ᛬
+ᚦᛖ᛫ᛏᚩᛏᛁᛖᚾᛏ᛫ᚠᚢᚾᚳᛏᛁᚩᚾ᛫ᛁᛋ᛫ᛋᚪᚳᚱᛖᛞ᛬
+ᚪᛚᛚ᛫ᚦᛁᛝᛋ᛫ᛋᚻᚩᚢᛚᛞ᛫ᛒᛖ᛫ᛈᚪᚱᛖᛞ᛫ᛏᚩ᛫ᚦᛖᛁᚱ᛫ᛋᛁᛗᛈᛚᛖᛋᛏ᛫ᛋᛏᚪᛏᛖ᛬
+
+## Decrypted Text
+SOME WISDOM:
+THE PRIMES ARE SACRED.
+THE TOTIENT FUNCTION IS SACRED.
+|   [...] (run 'cat corpus/page_56_loss_of_innocence.md' for full document)
+| Document: page_56_runes.md
+| Total Lines: 53
+| Preview:
+# Liber Primus — Page 56: Runic Transcript
+<!-- cicada:page=56 -->
+<!-- cicada:rune_count=273 -->
+<!-- cicada:gematria_prime_sum=14142 -->
+<!-- cicada:source=liber-primus__transcription--master.txt -->
+<!-- cicada:chunk_index=56 -->
+
+## Rune Transcription
+ᛠᛁᚪ᛫ᛋᚣᛗᛞᚣᛋ᛫ᛒᛞᛄᛞ᛬ᚩᚾᛏᛚ᛫ᚳᚪᛝ᛫ᚱᚷ
+ᚻᚷ᛫ᛄᚹᚠ᛫ᚪᚢᛇ᛫ᛞᛏᛗᛄᛁ᛫ᛝᚫ᛫ᛉᛈᚳᛈᛠ᛫ᛟᚪ
+ᛒᛁᛁᛋ᛫ᛇᚷᚻᛋ᛫ᛇᛡᛒ᛫ᚠᚹᛝ᛫ᚫᚪᚠᚩᚣᛡᚪᚾᚻ᛫ᛒᚦᛟ
+ᛇᚣᛟᛁᛒ᛫ᛟ᛫ᚩᛋᚹ᛫ᛞᚳᚠᚪᛁ᛬ᛉᛏᛟᚢᚩᛟᚦᛈᛋᚩ᛫
+ᚻᛇᚦᛝ᛫ᛏᛠᚠᛝᛠ᛫ᚩᛗ᛫ᛏᚠᚣᛚᚣ᛫ᚹᛚᛞ᛫ᚪᛉ
+ᛠ᛫ᚪᛄ᛫ᚩᛋᛒᛚ᛫ᚳᛖᚾᚪᚩᚱᛏᚦ᛫ᚱᛒᚳᚣ᛫ᛠᛗᚹᛚ᛫
+ᚻᛈ᛫ᛇᛈᛖ᛫ᛚᛄᚩᛡᚪ᛫ᛖᛋᚫᚩ᛫ᛠᛉᛝᚣ᛫ᛖᚫᛒ
+|   [...] (run 'cat corpus/page_56_runes.md' for full document)
++--------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> 
+==============================================================================
+TRITHEMIUS WORKSTATION — COMPLETE COMMAND REFERENCE MANUAL
+==============================================================================
+
+--- 1. RAG & KNOWLEDGE RETRIEVAL ---------------------------------------------
+  /ask [--fresh] <query>          Query RAG cryptanalytic engine with hybrid
+                                  retrieval & routing
+  /web <query>                    Query RAG engine (offline Liber Primus
+                                  corpus fallback)
+  /page <page_num>                Inspect and transcribe specific Liber Primus
+                                  page from corpus
+
+--- 2. CRYPTANALYSIS & SACRED NUMEROLOGY -------------------------------------
+  /gematria <runes|latin>         Gematria Primus prime sum, totient, prime
+                                  check & Atbash
+  /atbash <t> [--shift N]         Modulo-29 Atbash and Caesar-shifted Atbash
+                                  reflection cipher
+  /vigenere <enc|dec> <t> <k>     Modulo-29 (Futhorc) or Modulo-26 (Latin)
+                                  Vigenère cipher solver
+  /totient-stream <m> <t>         Liber Primus Prime Totient Stream Cipher
+                                  (phi(p) = p - 1)
+  /solve [target|all]             Solve and verify canonical Liber Primus
+                                  solved pages from wiki
+  /crack <target> [options]       Automated Liber Primus GF(29) Cryptanalytic
+                                  Cascade Solver
+  /triage <target>                Statistical triage & cipher family
+                                  classification (IC, kappa, entropy)
+  /period <target> [max_p]        Key length consensus & difference
+                                  periodogram comb filter
+  /crib <target> <crib>           Slide known crib for Berlekamp-Massey LC &
+                                  stream matching
+  /opsec <target>                 Verify Cicada 3301 PGP 7A35090F signature &
+                                  Shannon entropy
+  /layout [target|calibrate]      Layout side-channel mutual information &
+                                  calibration
+  /running-key <p> <t>            GF(29) running-key decryption against
+                                  reference text
+  /running-key-scan <p>           Sliding window running-key scan across
+                                  reference texts
+  /lexicon [phrases|words]        Inspect master vocabulary and philosophical
+                                  phrases
+  /ledger [page]                  Inspect tested words and attempts in
+                                  ChromaDB vector store
+
+--- 3. CORPUS MANAGEMENT & INGESTION -----------------------------------------
+  /organize                       Deduplicate and classify corpus documents
+                                  via Porta
+  /ingest                         Chunk and index corpus documents into
+                                  ChromaDB vector database
+
+--- 4. MODEL, ENGINE & HARDWARE CONFIGURATION --------------------------------
+  /key [show|clear|<p> <k>]       AI API keys & cloud provider configuration
+                                  section
+  /think [on|off]                 Toggle Chain-of-Thought (CoT) reasoning for
+                                  reasoning models
+  /boost [on|off|status]          Toggle Deep Cryptanalytic Retrieval &
+                                  Reranking Boost mode
+  /provider [name]                Switch active LLM provider (ollama, groq,
+                                  openai, anthropic, etc.)
+  /model [key_or_name]            Switch active language model key or specify
+                                  custom model
+  /host [url]                     Set remote Ollama streaming endpoint host
+                                  URL
+  /profile [mode]                 Toggle hardware profile between standard and
+                                  low-spec footprint
+  /cache clear                    Clear exact RAG response cache in
+                                  vectordb/.rag_cache.json
+
+--- 5. TELEMETRY, BENCHMARKING & SYSTEM --------------------------------------
+  /status                         Display system telemetry, provider health,
+                                  model & corpus metrics
+  /bench [options]                Run microsecond latency benchmark suite &
+                                  hotspot profiling
+  /clear                          Clear terminal screen buffer
+  /help [command]                 Display command manual or detailed help for
+                                  a specific command
+  /exit, /quit                    Safely exit and disconnect from Trithemius
+                                  Workstation
+
+Tip: Type '/help <cmd>' (e.g. '/help gematria' or '/help boost') for details.
+==============================================================================
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> 
++--- [HELP: /vigenere] -------------------------------------------------------
+| Summary:     Modulo-29 (Futhorc) or Modulo-26 (Latin) Vigenère cipher solver
+| Syntax:      /vigenere <enc|dec> <text_filepath_or_page> <key> [--f-skip] [--skip-indices ...]
+| Description: Cryptanalytic polyalphabetic solver. Accepts raw text, a file path (e.g. corpus/page_56_runes.md),
+or a page number (e.g. 56). For transcript files, automatically extracts clean runic text
+isolated from markdown headers and comments. If runes are detected in text or key,
+executes Modulo-29 rune shift algebra based on Gematria Primus rune indices.
+Otherwise executes Modulo-26 Classical Latin shift algebra. Supports cleartext Fehu (F)
+skips where key pointer pauses and Fehu passes through unencrypted (as on Welcome & Koan 2).
+Automatically passes decrypted text through the Al-Kindi statistical gatekeeper to compute
+Index of Coincidence (IoC), Chi-squared distance to English letter distribution,
+and English dictionary word ratio to determine plausibility.
+|
+| Options / Flags:
+|   enc / encode: Encrypt plaintext using key
+|   dec / decode: Decrypt ciphertext using key
+|   --f-skip: Enable cleartext Fehu keystream pause (default skip schedules for DIVINITY / FIRFUMFERENFE)
+|   --skip-indices: Explicit comma-separated skip indices (e.g. 48,74,84...)
+|
+| Examples:
+|   /vigenere dec 01 DIVINITY --f-skip
+|   /vigenere dec 12 FIRFUMFERENFE --f-skip
+|   /vigenere dec corpus/page_56_runes.md DIVINITY
+|   /vigenere enc "WELCOME PILGRIMS" CICADA
++-----------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> 
++--- [TRITHEMIUS SYSTEM TELEMETRY] ---------------------------------------
+| Active Provider: OLLAMA (Host: http://localhost:11434)
+| Active Model:    SparkLLM/Spark-X2.5-4B (spark)
+| Hardware Profile:STANDARD (num_ctx: 8192)
+| Chain-of-Thought:DISABLED
+| Retrieval Boost: DISABLED
+| Context Window:  8192 tokens
+| Configured Keys: None (Local Mode)
+| Corpus Files:    102 files in corpus/
+| Vector Database: 143 chunks indexed in vectordb/ (BM25 zero-VRAM ready)
+| Official PGP:    7A35090F (6D854CD7933322A601C...)
++--------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+COMMANDS REFERENCE: (Categorized by Type)
+  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
+                   /vigenere    /totient-stream             /triage
+                   /period      /crib        /opsec         /layout
+                   /lexicon     /running-key /running-key-scan
+  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
+  [AI ENGINE]      /key (AI keys & config)   /provider      /model
+                   /think       /boost       /host          /profile   /cache
+  [SYSTEM]         /status      /bench       /hardware    /clear     /help
+                   /exit        (Hardware aliases: /gpu, /metal, /ane)
+  (Type any natural language query to ask the RAG assistant directly)
+------------------------------------------------------------------------------
+trithemius> [*] Workstation session terminated.
+
+--stderr--

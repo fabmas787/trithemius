@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Liber Primus Page 0 - Welcome",
+    "ciphertext": "ᚹᛖᛚᚳᚩᛗᛖ᛫ᛈᛁᛚᚷᚱᛁᛗᛋ᛫ᛏᚩ᛫ᚦᛁᛋ᛫ᚷᚱᛠᛏ᛫ᛄᚩᚢᚱᚾᛖᚣ",
+    "expected_plaintext": "WELCOME PILGRIMS TO THIS GREAT JOURNEY",
+    "method": "transliteration",
+    "key": null
+  },
+  {
+    "name": "Rune Vigenere Modulo 29 with Key DIVINITY",
+    "ciphertext": "ᚢᛠᛝᛋᛇᚠᚳ᛫ᛁᚱᚢᚹᛉᛗᚠᚦ",
+    "expected_plaintext": "WELCOME PILGRIMS",
+    "method": "rune_vigenere",
+    "key": "DIVINITY"
+  },
+  {
+    "name": "Prime Keystream Verification",
+    "ciphertext": "ᚾᛝᚫᛇᛉᚩᚷ᛫ᚩᚱᛚᚻᛇᛟᚱᚱ",
+    "expected_plaintext": "WELCOME PILGRIMS",
+    "method": "prime_stream",
+    "key": "primes"
+  }
+]

@@ -1,0 +1,24 @@
+rc=0
+--stdout--
+
++--- [CRIB DRAGGING & ALGEBRAIC KEY ANALYSIS] ----------------------------
+| Source File:     page_56_runes.md
+| Crib Tested:     'DIVINITY'
+| Window Positions: 266 offsets tested
+| Significant Hits Found: 254
+|
+|  Pos  Implied Key  Lin Complex  Alg Order  Stream Bank Match
+|  0    ᚳᚠᛞᚳᛒᚾᚹᚠ     LC=4        -          -
+|  1    ᛏᛉᛉᛏᛁᛈᛁᛖ     LC=4        -          -
+|  2    ᚢᚳᚫᚾᛉᛏᛠᛚ     LC=4        -          -
+|  3    ᛝᛏᛖᛈᛒᚳᚢᚣ     LC=4        -          -
+|  4    ᚩᚾᛟᛏᚷᚹᚹᛉ     LC=4        -          -
+|  5    ᚫᛈᚫᚳᚻᛈᚪᚣ     LC=4        -          -
+|  6    ᚠᛏᛉᚹᛉᚢᚹᚷ     LC=4        -          -
+|  7    ᚩᚳᛏᛈᚦᛈᛏᛇ     LC=4        -          -
+|  9    ᛞᛈᛁᛈᛞᛠᚠᛞ     LC=4        -          -
+|  10   ᚠᚢᛟᛟᚠᚷᚱᚻ     LC=4        -          -
++--------------------------------------------------------------------------
+
+
+--stderr--

@@ -1,0 +1,10 @@
+# Trithemius — Liber Primus Research Assistant Dependencies
+
+# Vector store & embeddings
+chromadb>=0.4.0
+
+# Local LLM client (Ollama)
+ollama>=0.3.0
+
+# Multi-provider Cloud LLM streaming (Groq, Gemini, OpenAI, Claude, OpenRouter)
+requests>=2.28.0

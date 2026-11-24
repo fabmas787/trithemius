@@ -1,0 +1,47 @@
+rc=0
+--stdout--
+
++--- [VIGENERE CRYPTANALYSIS] ---------------------------------------------
+| Source File:     page_56_runes.md (Rune Transcription section)
+| Extracted Runes: 273
+| Operation:       DECODE via Modulo-29 (Futhorc Runes)
+| Key:             DIVINITY
+| Fehu (F) Skip:   DISABLED
+| Result:
+|   ᚳᚠᛞ᛫ᚳᛒᚾᚹᚠᛝ᛫ᚹᛟᚢᛉ᛬ᛟᛟᛗᚣ᛫ᚪᛞᛄ᛫ᚪᚫ
+|   ᛝᚾ᛫ᛒᚣᛠ᛫ᛉᛝᚦ᛫ᚹᛗᚫᚢᚾ᛫ᛄᛏ᛫ᚱᚣᚻᛗᛖ᛫ᛝᛉ
+|   ᚻᚠᛞᛖ᛫ᛖᚫᚹᚳ᛫ᚩᛒᚢ᛫ᚩᛈᛄ᛫ᚪᛉᛚᛟᛁᚢᚢᛠᚹ᛫ᚹᛟᛇ
+|   ᚫᚠᛠᚠᛏ᛫ᛇ᛫ᛞᚳᛚ᛫ᚣᛄᛗᛞᚠ᛬ᚳᚷᚷᚱᚾᛇᚢᚩᚷᛟ᛫
+|   ᛝᛋᚻᛄ᛫ᛋᛖᛚᛄᛇ᛫ᚷᚫ᛫ᚷᛠᛏᛄᛏ᛫ᛚᛞᚠ᛫ᛉᛈ
+|   ᛖ᛫ᛋᚢ᛫ᛏᛖᛞᛁ᛫ᚱᚻᚠᛉᛏᚹᛟᛝ᛫ᚩᚹᚫᛏ᛫ᛇᛟᛈᛁ᛫
+|   ᚹᚩ᛫ᚩᚩᚦ᛫ᛞᛒᛟᚣᛉ᛫ᚾᚳᚾᚷ᛫ᚳᚱᛚᛏ᛫ᚾᛋᚢ
+|   ᛟ᛫ᚪᛡᚩ᛫ᚩᚠᚾ᛫ᛚᛗᛠᛏᚠ᛫ᛗᚳᚩᚩᚷᛇᛠ᛫ᚣᚦᚫ
+|   ᛗᚢᛏᚫ᛫ᚳᛄᚠ᛫ᚾᚩᛉᚹᛟᚪᚫ᛫ᚢᛄᛗ᛬ᛒᛞᛁᛋᛒᛡᛈ
+|   ᛫ᚦᛁᚢ᛫ᚾᚱ᛫ᛞᚳᛒᚠᚳ᛫ᛒᚣᚢ'ᚱ᛫ᚻᛒᛚᚳᚳᛖᛞ᛫
+|   ᛡᚠᛏ᛫ᛝᛈᚫᛇᛖᚾ᛫ᚩᚷᚹ᛫ᚩᛚᛒᛗᚻᚪᚾ᛫ᛡᚾᚷᛒ᛫
+|   ᚱᛁᛁᚱᛉᛞ᛫ᚫᛈᛞᚾᛞᛟᚻᛡ᛫ᛡᛋ᛫ᛈᛁᚫ᛫ᛈᛇᛖᛗᛒ
+| Decoded Latin:
+|   CFD CBNWFING WOEUX
+|   OEOEMY ADJ AAE
+|   INGN BYEA XINGTH WMAEUN JT RYHME INGX
+|   HFDE EAEWC OBU OPJ AXLOEIUUEAW WOEEO
+|   AEFEAFT EO DCL YJMDF
+|   CGGRNEOUOGOE 
+|   INGSHJ SELJEO GAE GEATJT LDF XP
+|   E SU TEDI RHFXTWOEING OWAET EOOEPI 
+|   WO OOTH DBOEYX NCNG CRLT NSU
+|   OE AIAO OFN LMEATF MCOOGEOEA YTHAE
+|   MUTAE CJF NOXWOEAAE UJM
+|   BDISBIAP
+|    THIU NR DCBFC BYU'R HBLCCED 
+|   IAFT INGPAEEOEN OGW OLBMHAN IANGB 
+|   RIIRXD AEPDNDOEHIA IAS PIAE PEOEMB
+| Index of Coinc:  0.034
+| Chi-Squared:     361.37 (English < 180)
+| Ngram Score:     0.0505 (0.0 to 1.0)
+| English Words:   0.067 (6.7%)
+| Gatekeeper:      [REJECT]
++--------------------------------------------------------------------------
+
+
+--stderr--

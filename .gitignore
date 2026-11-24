@@ -1,0 +1,64 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environment and sensitive credentials
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+
+# Operating System metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Database WAL, SHM, and backup files (keep primary .sqlite3 tracked)
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3.bak*
+*.bak
+
+# Temporary and build artifacts
+*.tmp
+*.temp
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Ephemeral benchmark, profiling, and local caches
+vectordb/*.jsonl
+vectordb/*.pstats
+vectordb/*.tmp
+vectordb/*.bak*
+vectordb/importtime_*.txt
+vectordb/cache.sqlite3*
+
+# Agent worktrees and scratch directories
+.manus/
+.agents/
+.placeholder
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

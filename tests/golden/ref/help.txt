@@ -1,0 +1,71 @@
+rc=0
+--stdout--
+usage: trithemius.py [-h] [--model MODEL] [--moe] [--provider PROVIDER]
+                     [--api-key API_KEY] [--ollama-host OLLAMA_HOST]
+                     [--low-spec] [--think] [--boost] [--json]
+                     {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache}
+                     ...
+
+Trithemius Liber Primus Cryptanalytic Workstation
+
+positional arguments:
+  {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache}
+                        Direct CLI subcommand
+    boost               Toggle, set, or inspect Cryptanalytic Boost mode
+    help                Display command reference manual or command details
+    web                 Query RAG knowledge engine with live web
+                        reconnaissance
+    ask                 Query RAG knowledge engine
+    gematria            Gematria Primus prime sum, totient, and Atbash
+    atbash              Modulo-29 Atbash and Caesar-shifted Atbash reflection
+                        cipher
+    vigenere            Modulo-29 or Modulo-26 Vigenère cryptanalysis
+    totient-stream      Liber Primus Prime Totient Stream Cipher (phi(p) = p -
+                        1)
+    totient             Liber Primus Prime Totient Stream Cipher (phi(p) = p -
+                        1)
+    solve               Solve and verify canonical Liber Primus solved pages
+    crack               Liber Primus GF(29) Cryptanalytic Cascade Solver
+    triage              Statistical triage & cipher classification
+    period              Key length consensus & periodogram comb estimation
+    crib                Slide crib word for implied key analysis
+    opsec               Inspect PGP 7A35090F signature and Shannon entropy
+    layout              Layout side-channel mutual information analysis
+    organize            Deduplicate and classify corpus via Porta
+    ingest              Chunk and embed corpus into ChromaDB via Bodleian
+    page                Inspect specific Liber Primus page from corpus
+    bench               Run microsecond latency benchmark and profiling
+    status              Display system telemetry and corpus health
+    running-key         GF(29) running-key decryption against reference text
+    running-key-scan    Scan canonical reference texts against target page
+    lexicon             Master vocabulary and philosophical phrase inspector
+    key                 AI API key and cloud provider configuration section
+    keys                Alias for 'key'
+    hardware            Query and benchmark Apple Silicon hardware
+    gpu                 Alias for 'hardware'
+    metal               Alias for 'hardware'
+    ane                 Alias for 'hardware'
+    ledger              Display cryptanalytic ledger
+    think               Toggle Chain-of-Thought
+    provider            Switch active provider
+    model               Switch active model
+    host                Set Ollama host
+    profile             Toggle hardware profile
+    cache               Manage RAG cache
+
+options:
+  -h, --help            show this help message and exit
+  --model MODEL         Model key or custom model name
+  --moe                 Shortcut for --model moe
+  --provider PROVIDER   Inference provider (ollama, groq, openai, gemini,
+                        anthropic, openrouter)
+  --api-key API_KEY     Personal API key for selected cloud provider
+  --ollama-host OLLAMA_HOST
+                        Remote Ollama host URL (e.g. http://remote:11434)
+  --low-spec            Enable low-RAM/CPU profile (num_ctx: 2048)
+  --think               Enable Chain-of-Thought reasoning
+  --boost               Enable Deep Cryptanalytic Retrieval and Reranking
+                        Boost mode
+  --json                Format CLI output as machine-readable JSON
+
+--stderr--

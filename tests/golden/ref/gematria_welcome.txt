@@ -1,0 +1,17 @@
+rc=0
+--stdout--
+
++--- [GEMATRIA PRIMUS ARITHMETIC] -----------------------------------------
+| Input Text:      ᚹᛖᛚᚳᚩᛗᛖ
+| Futhorc Runes:   ᚹᛖᛚᚳᚩᛗᛖ
+| Decoded Latin:   WELCOME
+| Prime Sum:       317 (Euler Totient phi: 316, Is Prime: True)
+| Prime Factors:   [317]
+| Atbash Runes:    ᛝᛁᚻᛞᚫᚾᛁ
+| Atbash Latin:    INGIHDAENI
+| Word Breakdown:
+|   ᚹᛖᛚᚳᚩᛗᛖ (WELCOME) -> Prime Sum: 317 (Prime: True)
++--------------------------------------------------------------------------
+
+
+--stderr--

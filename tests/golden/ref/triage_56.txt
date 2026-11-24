@@ -1,0 +1,17 @@
+rc=0
+--stdout--
+
++--- [CRYPTANALYTIC STATISTICAL TRIAGE] -----------------------------------
+| Source File:         page_56_runes.md (Rune Transcription section)
+| Symbol Count:        273 runes
+| Unigram IC:          0.03313 (Random Flat Noise = 0.03448)
+| Normalized Kappa:    0.9607 (Uniform = 1.0, English > 1.45)
+| Bigram IC:           0.00125
+| Conditional Entropy: 2.9655 bits/rune
+| Word Lengths:        len 1: 3, len 2: 10, len 3: 19, len 4: 11, len 5: 9, len 6: 3
+| Cipher Diagnosis:    [APERIODIC_OR_STREAM]
+| Recommendation:      Flat unigram IC. Test totient/prime mathematical streams, F-skip, or running keys.
++--------------------------------------------------------------------------
+
+
+--stderr--

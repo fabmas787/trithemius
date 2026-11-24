@@ -1,0 +1,43 @@
+rc=0
+--stdout--
+
++--- [LIBER PRIMUS CRYPTANALYTIC SOLVER] ----------------------------------
+| Source File:     page_00_runes.md (Rune Transcription section)
+| Target Runes:    184
+| Triage Status:   MONOALPHABETIC_SUBSTITUTION (Kappa: 1.857, IC: 0.0640)
+| Consensus Period: Top Period m = 1
+|
+| TOP CANDIDATE DECRYPTIONS (Ranked by Calibrated GF(29) Fitness):
+| 1. [Score: -1.5698] [ANE: +0.067] CANONICAL_ATBASH_F29
+|    Key:     'ATBASH'
+|    Latin:   AWARNINGBELIEUENOTHINGFROMTHISBOOCEXCEPTWHATYOUCNOWTOBET...
+|    Surrogate: <SURROGATE_STATS>
+| 2. [Score: -1.5698] [ANE: +0.067] BEAUFORT_REVERSED_ATBASH_PERIOD_1
+|    Key:     'BELIEF_BEAUFORT_REVERSED_ATBASH'
+|    Latin:   AWARNINGBELIEUENOTHINGFROMTHISBOOCEXCEPTWHATYOUCNOWTOBET...
+| 3. [Score: -1.5698] [ANE: +0.067] BEAUFORT_ATBASH_PERIOD_1
+|    Key:     'FAITH_BEAUFORT_ATBASH'
+|    Latin:   AWARNINGBELIEUENOTHINGFROMTHISBOOCEXCEPTWHATYOUCNOWTOBET...
+| 4. [Score: -1.5698] [ANE: +0.067] BEAUFORT_ATBASH_PERIOD_1
+|    Key:     'FIRFUMFERENFE_BEAUFORT_ATBASH'
+|    Latin:   AWARNINGBELIEUENOTHINGFROMTHISBOOCEXCEPTWHATYOUCNOWTOBET...
+| 5. [Score: -1.5698] [ANE: +0.067] BEAUFORT_REVERSED_ATBASH_PERIOD_2
+|    Key:     'CLIFF_BEAUFORT_REVERSED_ATBASH'
+|    Latin:   AWARNINGBELIEUENOTHINGFROMTHISBOOCEXCEPTWHATYOUCNOWTOBET...
+|
+| CRIB DRAG MATCHES:
+|    Pos <P>: Crib '<CRIB>' -> Implied Key '<KEY>' [<MATCH>]
+|    Pos <P>: Crib '<CRIB>' -> Implied Key '<KEY>' [<MATCH>]
+|    Pos <P>: Crib '<CRIB>' -> Implied Key '<KEY>' [<MATCH>]
+|
+| VECTOR DATABASE TELEMETRY:
+|    Attempts Recorded This Run: <COUNT>
+|    Total Unique Words Tested on Page '<PAGE>': <WORD_COUNT> (Deduplicated)
+|
+| HARDWARE ACCELERATION TELEMETRY:
+|    Metal GPU:     Apple M4 (UMA Zero-Copy, 9093 MB buffer)
+|    Neural Engine: Active (16-Core ANE, 38 TOPS via CoreML)
++--------------------------------------------------------------------------
+
+
+--stderr--

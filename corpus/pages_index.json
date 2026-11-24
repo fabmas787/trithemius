@@ -1,0 +1,169 @@
+[
+  {
+    "page": 0,
+    "title": "A Warning",
+    "original_image": "01.jpg",
+    "status": "solved",
+    "cipher": "Atbash in F_29",
+    "key": null,
+    "summary": "Believe nothing from this book, except what you know to be true. Test the knowledge, find your truth, experience your death. Do not edit or change this book for all is sacred."
+  },
+  {
+    "page": 1,
+    "title": "Welcome (Part 1)",
+    "original_image": "03.jpg",
+    "status": "solved",
+    "cipher": "Rune Vigenere (mod 29)",
+    "key": "DIVINITY",
+    "f_skip": true,
+    "summary": "Welcome pilgrim to the great journey toward the end of all things. Along the way you will find an end to all struggle and suffering."
+  },
+  {
+    "page": 2,
+    "title": "Welcome (Part 2)",
+    "original_image": "04.jpg",
+    "status": "solved",
+    "cipher": "Rune Vigenere (mod 29)",
+    "key": "DIVINITY",
+    "f_skip": true,
+    "summary": "An instruction: command your own self. Each intelligence is holy. To be a star is to be unique."
+  },
+  {
+    "page": 3,
+    "title": "Some Wisdom",
+    "original_image": "05.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "The primes are sacred. The totient function is sacred. All things should be encrypted. Know this: shadows, aethereal."
+  },
+  {
+    "page": 4,
+    "title": "Koan 1 (Part 1)",
+    "original_image": "06.jpg",
+    "status": "solved",
+    "cipher": "Atbash + Caesar (+3) in F_29",
+    "key": "Atbash+3",
+    "summary": "A man decided to go and study with a master. He went to the door of the master. 'Who are you who wishes to study here?' asked the master."
+  },
+  {
+    "page": 5,
+    "title": "Koan 1 (Part 2)",
+    "original_image": "07.jpg",
+    "status": "solved",
+    "cipher": "Atbash + Caesar (+3) in F_29",
+    "key": "Atbash+3",
+    "summary": "The student told the master his name. 'That is not who you are, that is only what you are called.'"
+  },
+  {
+    "page": 6,
+    "title": "Koan 1 (Part 3)",
+    "original_image": "08.jpg",
+    "status": "solved",
+    "cipher": "Atbash + Caesar (+3) in F_29",
+    "key": "Atbash+3",
+    "summary": "'I am a professor.' 'That is what you do, not who you are.' 'I am a human being.' 'That is only your species.'"
+  },
+  {
+    "page": 7,
+    "title": "Koan 1 (Part 4)",
+    "original_image": "09.jpg",
+    "status": "solved",
+    "cipher": "Atbash + Caesar (+3) in F_29",
+    "key": "Atbash+3",
+    "summary": "'I am a consciousness inhabiting an arbitrary body.' The master smiled and welcomed him. Do four unreasonable things each day."
+  },
+  {
+    "page": 8,
+    "title": "The Loss of Divinity (Part 1)",
+    "original_image": "10.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "The circumference practices three behaviors: consumption, preservation, adherence. By these behaviors the circumference protects itself."
+  },
+  {
+    "page": 9,
+    "title": "The Loss of Divinity (Part 2)",
+    "original_image": "11.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "To belong is death. When the circumference demands obedience, the individual is lost."
+  },
+  {
+    "page": 10,
+    "title": "The Loss of Divinity (Part 3)",
+    "original_image": "12.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "Amass great wealth, never become attached to it. Preserve your autonomy against the pressure of the circumference."
+  },
+  {
+    "page": 11,
+    "title": "The Loss of Divinity (Part 4)",
+    "original_image": "13.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "Program your mind. Program reality. Question everything and accept only verified truth."
+  },
+  {
+    "page": 12,
+    "title": "Koan 2 (Part 1)",
+    "original_image": "14.jpg",
+    "status": "solved",
+    "cipher": "Rune Vigenere (mod 29)",
+    "key": "FIRFUMFERENFE",
+    "f_skip": true,
+    "summary": "During a lesson the master explained the I. The I is the voice of the circumference, he said. It is a voice inside your head."
+  },
+  {
+    "page": 13,
+    "title": "Koan 2 (Part 2)",
+    "original_image": "15.jpg",
+    "status": "solved",
+    "cipher": "Rune Vigenere (mod 29)",
+    "key": "FIRFUMFERENFE",
+    "f_skip": true,
+    "summary": "A student raised his hand and said: 'I don't have a voice in my head.' The master said: 'Who was it that said that?' And the students were enlightened."
+  },
+  {
+    "page": 14,
+    "title": "An Instruction",
+    "original_image": "16.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "Question all things. Discover truth inside yourself. Follow your truth. Impose nothing on others. Know this."
+  },
+  {
+    "page": 56,
+    "title": "Page 56 (Loss of Innocence / Mobius Strip)",
+    "original_image": "56_unsolved.jpg",
+    "status": "unsolved",
+    "cipher": "Unsolved (High-entropy / Modulo-29)",
+    "key": null,
+    "summary": "Unsolved Liber Primus runic transcript (273 runes, unigram IoC ~0.0331, uncracked)."
+  },
+  {
+    "page": 71,
+    "title": "An End",
+    "original_image": "56.jpg (LP 73.jpg)",
+    "status": "solved",
+    "cipher": "Prime Totient Stream Cipher",
+    "key": "phi(primes[i]) = primes[i] - 1",
+    "f_skip": true,
+    "summary": "An end. Within the deep web there exists a page that hashes to 36367763ab... It is the duty of every pilgrim to seek out this page."
+  },
+  {
+    "page": 72,
+    "title": "Parable",
+    "original_image": "57.jpg",
+    "status": "solved",
+    "cipher": "Direct Transliteration",
+    "key": null,
+    "summary": "Like the instar tunneling to the surface, we must shed our own circumferences. Find the divinity within and emerge."
+  }
+]

@@ -1,0 +1,480 @@
+"""
+Declarative Command Specifications for Trithemius Workstation.
+Single source of truth projected onto REPL dispatch, argparse subparsers, help manual, and tab-completion.
+"""
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+
+@dataclass(frozen=True)
+class Arg:
+    name: str
+    kind: str = "token"  # "token" | "int" | "path" | "greedy_text" | "choice"
+    choices: Tuple[str, ...] = ()
+    optional: bool = False
+    default: Any = None
+    help: str = ""
+
+
+@dataclass(frozen=True)
+class Option:
+    flags: Tuple[str, ...]
+    action: str = "store"  # "store" | "store_true"
+    type: Any = str
+    default: Any = None
+    choices: Tuple[str, ...] = ()
+    help: str = ""
+
+
+@dataclass(frozen=True)
+class CommandSpec:
+    name: str
+    aliases: Tuple[str, ...] = ()
+    syntax: str = ""
+    summary: str = ""
+    description: str = ""
+    category: str = "CRYPTANALYSIS"
+    args: Tuple[Arg, ...] = ()
+    options: Tuple[Option, ...] = ()
+    examples: Tuple[str, ...] = ()
+    handler: str = ""
+
+COMMAND_SPECS = (
+    CommandSpec(
+        name='ask',
+        aliases=(),
+        syntax='/ask [--fresh] <query>',
+        summary='Query RAG cryptanalytic engine with hybrid retrieval & deterministic routing',
+        description='Queries the workstation knowledge base. Evaluates deterministic routing\nrules (router.py) for exact Liber Primus page queries, rune transliterations,\nand Gematria lookups to provide instant, verified ground truth. For general\nquestions, runs hybrid dense vector (ChromaDB) or zero-VRAM BM25 lexical\nretrieval with cryptographic relevance boosting, then streams LLM inference.',
+        category='KNOWLEDGE',
+        args=(Arg(name='query', kind='greedy_text', choices=(), optional=False, default=None, help='Question to ask'),),
+        options=(Option(flags=('--web',), action='store_true', type=str, default=None, choices=(), help='Include live web search context'), Option(flags=('--fresh',), action='store_true', type=str, default=None, choices=(), help='Bypass response cache')),
+        examples=('/ask What is the sacred prime value of WELCOME?', '/ask --fresh What do the warning runes on page 57 signify?', 'What is the significance of 3301? (Type query directly without /ask)'),
+        handler='run_ask',
+    ),
+    CommandSpec(
+        name='web',
+        aliases=(),
+        syntax='/web <query>',
+        summary='Query Liber Primus RAG knowledge engine (offline corpus fallback)',
+        description='Queries the Liber Primus research corpus. Note: Live web reconnaissance has been\nretired in favor of the complete, authentic transcripts preserved offline in corpus/.',
+        category='KNOWLEDGE',
+        args=(Arg(name='query', kind='greedy_text', choices=(), optional=False, default=None, help='Research question'),),
+        options=(),
+        examples=('/web Liber Primus uncracked pages analysis', '/web Cicada 3301 sacred primes'),
+        handler='run_ask',
+    ),
+    CommandSpec(
+        name='page',
+        aliases=(),
+        syntax='/page <page_num>',
+        summary='Inspect and transcribe specific Liber Primus page from corpus',
+        description='Locates and inspects canonical Liber Primus pages in corpus/ matching the\ngiven page number (e.g. 0, 56, 73). Displays document header, total lines,\nraw Futhorc runes, and English transcription preview.',
+        category='KNOWLEDGE',
+        args=(Arg(name='page_num', kind='token', choices=(), optional=False, default=None, help='Page number'),),
+        options=(),
+        examples=('/page 56', '/page 00', '/page 73'),
+        handler='run_page',
+    ),
+    CommandSpec(
+        name='organize',
+        aliases=(),
+        syntax='/organize',
+        summary='Deduplicate and classify corpus documents via Porta',
+        description='Corpus curation engine (Porta). Computes SHA-256 digests and normalized rune\nsignatures across all corpus files. Moves duplicates into corpus/_duplicates/\nand generates structured classification metadata.',
+        category='CORPUS MANAGEMENT & INGESTION',
+        args=(),
+        options=(),
+        examples=('/organize',),
+        handler='run_organize',
+    ),
+    CommandSpec(
+        name='ingest',
+        aliases=(),
+        syntax='/ingest',
+        summary='Chunk and index corpus documents into ChromaDB vector database',
+        description='Semantic ingestion pipeline (Bodleian). Chunks documents with cryptographic\nmetadata (page numbers, rune flags, PGP status) and computes vector embeddings\ninto vectordb/ for dense similarity retrieval.',
+        category='CORPUS MANAGEMENT & INGESTION',
+        args=(),
+        options=(),
+        examples=('/ingest',),
+        handler='run_ingest',
+    ),
+    CommandSpec(
+        name='gematria',
+        aliases=(),
+        syntax='/gematria <runes_or_latin>',
+        summary='Gematria Primus prime sum, totient, prime check & Atbash reflection',
+        description="Sacred number-theory calculator using Agrippan occult philosophy and the\nCicada 3301 Gematria Primus 29-rune mapping. Converts Latin to Futhorc runes\n(and vice-versa), computes total prime sum, tests primality, computes Euler's\ntotient phi(n), prime factorizes composite sums, calculates individual word\nprime sums, and applies Atbash reciprocal rune reflection.",
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='text', kind='greedy_text', choices=(), optional=False, default=None, help='Runes or Latin text'),),
+        options=(),
+        examples=('/gematria ᚹᛖᛚᚳᚩᛗᛖ', '/gematria WELCOME PILGRIMS', '/gematria ᛗᚣᚱᚳ ᛞᛁᚠᛁᚾᛁᛏᚣ'),
+        handler='run_gematria',
+    ),
+    CommandSpec(
+        name='atbash',
+        aliases=(),
+        syntax='/atbash <text_filepath_or_page> [--shift N]',
+        summary='Modulo-29 Atbash and Caesar-shifted Atbash reflection cipher',
+        description="Applies Atbash reciprocal reflection over the 29-rune Futhorc alphabet:\n    decimal[i] = (28 - decimal[i]) mod 29\nIf --shift is specified, adds an additive Caesar shift:\n    decimal[i] = ((28 - decimal[i]) + shift) mod 29\nCanonical methods:\n- Shift 0: Page 00 ('A warning', 01.jpg)\n- Shift 3: Koan 1 (06.jpg - 09.jpg, chunks 4-7; self-inverse involution)",
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='text', kind='greedy_text', choices=(), optional=False, default=None, help='Runes or Latin text'),),
+        options=(Option(flags=('--shift', '-s'), action='store', type=int, default=0, choices=(), help='Caesar shift offset'),),
+        examples=('/atbash 00', '/atbash 06 --shift 3', '/atbash "ᚪ᛫ᚹᚪᚱᚾᚾᚷ..."'),
+        handler='run_atbash',
+    ),
+    CommandSpec(
+        name='vigenere',
+        aliases=(),
+        syntax='/vigenere <enc|dec> <text_filepath_or_page> <key> [--f-skip] [--skip-indices ...]',
+        summary='Modulo-29 (Futhorc) or Modulo-26 (Latin) Vigenère cipher solver',
+        description='Cryptanalytic polyalphabetic solver. Accepts raw text, a file path (e.g. corpus/page_56_runes.md),\nor a page number (e.g. 56). For transcript files, automatically extracts clean runic text\nisolated from markdown headers and comments. If runes are detected in text or key,\nexecutes Modulo-29 rune shift algebra based on Gematria Primus rune indices.\nOtherwise executes Modulo-26 Classical Latin shift algebra. Supports cleartext Fehu (F)\nskips where key pointer pauses and Fehu passes through unencrypted (as on Welcome & Koan 2).\nAutomatically passes decrypted text through the Al-Kindi statistical gatekeeper to compute\nIndex of Coincidence (IoC), Chi-squared distance to English letter distribution,\nand English dictionary word ratio to determine plausibility.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='mode', kind='token', choices=('enc', 'dec'), optional=False, default=None, help='Mode'), Arg(name='text', kind='token', choices=(), optional=False, default=None, help='Text or page'), Arg(name='key', kind='token', choices=(), optional=False, default=None, help='Key')),
+        options=(Option(flags=('--f-skip',), action='store_true', type=str, default=None, choices=(), help='Enable cleartext Fehu keystream pause'), Option(flags=('--skip-indices',), action='store', type=str, default=None, choices=(), help='Indices to skip')),
+        examples=('/vigenere dec 01 DIVINITY --f-skip', '/vigenere dec 12 FIRFUMFERENFE --f-skip', '/vigenere dec corpus/page_56_runes.md DIVINITY', '/vigenere enc "WELCOME PILGRIMS" CICADA'),
+        handler='run_vigenere',
+    ),
+    CommandSpec(
+        name='totient-stream',
+        aliases=(),
+        syntax='/totient-stream <enc|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]',
+        summary='Liber Primus Prime Totient Stream Cipher (phi(p_i) = p_i - 1 mod 29)',
+        description="Executes the canonical Liber Primus stream cipher based on Euler totients of prime numbers:\n    decimal[i] = (decimal[i] - (primes[i + offset] - 1)) mod 29\nwhere primes[k] is the k-th prime (2, 3, 5, 7, 11, ...). Supports cleartext Fehu (F) skips\n(as on Page 56.jpg / 73.jpg 'An end', where index 56 has an unencrypted Fehu pausing the prime pointer).",
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='mode', kind='token', choices=('enc', 'dec'), optional=False, default=None, help='Mode'), Arg(name='text', kind='token', choices=(), optional=False, default=None, help='Text or page')),
+        options=(Option(flags=('--offset', '-o'), action='store', type=int, default=0, choices=(), help='Starting prime offset'), Option(flags=('--f-skip',), action='store_true', type=str, default=None, choices=(), help='Enable cleartext Fehu keystream pause')),
+        examples=('/totient-stream dec 71 --f-skip', '/totient-stream dec 56 --f-skip', '/totient-stream enc "AN END WITHIN THE DEEP WEB" --f-skip'),
+        handler='run_totient_stream',
+    ),
+    CommandSpec(
+        name='totient',
+        aliases=(),
+        syntax='/totient <enc|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]',
+        summary='Liber Primus Prime Totient Stream Cipher (phi(p_i) = p_i - 1 mod 29)',
+        description="Executes the canonical Liber Primus stream cipher based on Euler totients of prime numbers:\n    decimal[i] = (decimal[i] - (primes[i + offset] - 1)) mod 29\nwhere primes[k] is the k-th prime (2, 3, 5, 7, 11, ...). Supports cleartext Fehu (F) skips\n(as on Page 56.jpg / 73.jpg 'An end', where index 56 has an unencrypted Fehu pausing the prime pointer).",
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='args', kind='token', choices=(), optional=True, default=None, help='Number or page'),),
+        options=(),
+        examples=('/totient dec 71 --f-skip', '/totient dec 56 --f-skip', '/totient enc "AN END WITHIN THE DEEP WEB" --f-skip'),
+        handler='run_totient',
+    ),
+    CommandSpec(
+        name='solve',
+        aliases=(),
+        syntax='/solve [page_id|all]',
+        summary='Solve and verify canonical Liber Primus solved pages from official wiki',
+        description='Executes and validates the exact canonical cryptographic methods documented on the\nUncovering Cicada wiki for all 9 solved Liber Primus pages:\n1. Page 00: Atbash in F_29\n2. Welcome (01-02): Vigenère DIVINITY with cleartext F-skips\n3. Some wisdom (03): Direct Gematria transliteration\n4. Koan 1 (04-07): Atbash + Caesar (+3) in F_29\n5. The loss of divinity (08-11): Direct Gematria transliteration\n6. Koan 2 (12-13): Vigenère FIRFUMFERENFE with cleartext F-skips\n7. An instruction (14): Direct Gematria transliteration\n8. An end (71 / 56.jpg): Prime Totient Stream Cipher with Fehu skip\n9. Parable (72 / 57.jpg): Direct Gematria transliteration',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=True, default='all', help='Target page or all'),),
+        options=(),
+        examples=('/solve', '/solve all', '/solve 00', '/solve welcome', '/solve koan1', '/solve 71'),
+        handler='run_solve',
+    ),
+    CommandSpec(
+        name='crack',
+        aliases=(),
+        syntax='/crack <text_filepath_or_page> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]',
+        summary='Automated Liber Primus GF(29) Cryptanalytic Cascade Solver with Apple Silicon Acceleration',
+        description='Executes the full end-to-end cryptanalytic taxonomy pipeline:\n1. Triage: Unigram IC, normalized kappa, bigram IC, and conditional entropy.\n2. Period Detection: Kasiski weighted GCD, difference periodogram comb, and column IoC.\n3. Periodic Solvers: Separable T-table coordinate optimization, MIC gauge scan, and coupled hill climbing.\n4. Dictionary Attack: O(m) candidate keyword evaluation using precomputed T-tables.\n5. Metal GPU Compound Sweeps: Evaluates all W^2 multi-word compound phrases on Metal shaders.\n6. Deterministic Streams: Totients phi(p), primes, Fibonacci, and natural counters with Fehu skip.\n7. Crib Dragging: Implied key linear complexity (Berlekamp-Massey) and stream hash bank matching.\n8. Apple Neural Engine Reranking: Cosine semantic naturalness scoring on CoreML ANE.\n9. Deep Mode (--deep): 812-space affine transforms, autokey, and cross-page running-key correlation.\n10. Verification & Ledger: Monte Carlo surrogate shuffle test and persistent SQLite logging.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=False, default=None, help='Runes or page'),),
+        options=(Option(flags=('--deep',), action='store_true', type=str, default=None, choices=(), help='Deep multi-period search'), Option(flags=('--crib-limit',), action='store', type=int, default=200, choices=(), help=''), Option(flags=('--top-k',), action='store', type=int, default=5, choices=(), help=''), Option(flags=('--randomize',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--rotations',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--compound',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--no-metal',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--no-ane',), action='store_true', type=str, default=None, choices=(), help='')),
+        examples=('/crack 56', '/crack corpus/page_56_runes.md', '/crack 56 --compound', '/crack 56 --deep', '/crack 56 --random --rotations', '/crack "ᛠᛁᚪ᛫ᛋᚣᛗᛞᚣᛋ᛫ᛒᛞᛄᛞ..."'),
+        handler='run_crack',
+    ),
+    CommandSpec(
+        name='hardware',
+        aliases=('gpu', 'metal', 'ane'),
+        syntax='/hardware (aliases: /gpu, /metal, /ane)',
+        summary='Query and benchmark Apple Silicon Metal GPU and Apple Neural Engine acceleration',
+        description='Displays detailed hardware telemetry for Apple Silicon hardware acceleration:\n- Metal GPU device name, unified memory buffer allocation, and compute pipeline state\n- GPU benchmark testing 1,000,000 combinatorial key evaluations (throughput in M keys/sec)\n- Apple Neural Engine (ANE) status, core count, TOPS compute capacity, and CoreML provider',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(),
+        options=(),
+        examples=('/hardware', '/gpu', '/metal', '/ane'),
+        handler='run_hardware',
+    ),
+    CommandSpec(
+        name='ledger',
+        aliases=(),
+        syntax='/ledger [page_id_or_word]',
+        summary='Inspect recorded cryptanalytic attempts in the ChromaDB vector database',
+        description='Displays telemetry from the persistent ChromaDB vector store and SQLite ledger:\n- Number of unique candidate words tested for a page or globally\n- Total attempt records and embeddings indexed in ChromaDB\n- Sample recently tested words to confirm deduplication\n- Cosine nearest-neighbor similarity search against previous hypotheses',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=True, default=None, help='Page identifier'),),
+        options=(),
+        examples=('/ledger', '/ledger 56', '/ledger DIVINE'),
+        handler='run_ledger',
+    ),
+    CommandSpec(
+        name='triage',
+        aliases=(),
+        syntax='/triage <text_filepath_or_page>',
+        summary='Statistical triage & cipher family classification',
+        description='Computes unigram IC, normalized kappa (29*IC), bigram IC, conditional entropy,\nand word-length distribution to classify ciphertext into Monoalphabetic, Periodic\nPolyalphabetic, Transposition, or Stream/OTP cipher families.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=False, default=None, help='Target page or runes'),),
+        options=(),
+        examples=('/triage 56', '/triage corpus/page_00_runes.md'),
+        handler='run_triage',
+    ),
+    CommandSpec(
+        name='period',
+        aliases=(),
+        syntax='/period <text_filepath_or_page> [max_period]',
+        summary='Key length & difference periodogram comb filter estimation',
+        description='Performs multi-metric consensus key length estimation ensembling Kasiski\nweighted GCD voting, difference periodogram chi-squared comb filtering, and\ncolumn Index of Coincidence across periods m = 1..max_period.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=False, default=None, help='Target page or runes'), Arg(name='max_period', kind='token', choices=(), optional=True, default=30, help='Max period')),
+        options=(),
+        examples=('/period 56', '/period corpus/page_56_runes.md 24'),
+        handler='run_period',
+    ),
+    CommandSpec(
+        name='crib',
+        aliases=(),
+        syntax='/crib <text_filepath_or_page> <crib_word>',
+        summary='Slide crib word to extract & analyze implied key fragments',
+        description='Slides candidate crib across all ciphertext positions and evaluates implied\nkeystream fragments: Berlekamp-Massey linear complexity over GF(29), constant\nfinite differences, and O(1) matching against precomputed deterministic stream hash bank.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=False, default=None, help='Target page or runes'), Arg(name='crib_word', kind='token', choices=(), optional=False, default=None, help='Crib word')),
+        options=(),
+        examples=('/crib 56 DIVINITY', '/crib 56 WELCOME', '/crib corpus/page_56_runes.md SACRED'),
+        handler='run_crib',
+    ),
+    CommandSpec(
+        name='layout',
+        aliases=(),
+        syntax='/layout [target|calibrate]',
+        summary='Layout side-channel mutual information analysis & calibration',
+        description="Models Liber Primus pages as multiplexed symbol and layout streams.\nEvaluates discrete mutual information I(layout ; keystream shift) for word lengths,\nline lengths, runic separators (᛫, ᛬, ᛭), and Fehu interrupt positions.\nApplies Miller-Madow bias correction and Besag-Clifford sequential Monte Carlo null testing.\nWhen run with 'calibrate' (or no arguments), evaluates all known-solved pages (0, 56, 57, 73)\nand persists results to the hypothesis ledger under family 'layout-carrier'.",
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=True, default='all', help='Target page or calibrate'),),
+        options=(),
+        examples=('/layout calibrate', '/layout 56', '/layout corpus/page_00_runes.md'),
+        handler='run_layout',
+    ),
+    CommandSpec(
+        name='opsec',
+        aliases=(),
+        syntax='/opsec <text_or_filepath>',
+        summary='Verify Cicada 3301 PGP 7A35090F signature & Shannon entropy',
+        description='Evaluates operational security and steganographic features of text or files.\nChecks for valid PGP message blocks and authenticates against the Cicada 3301\nPGP key (Key ID: 7A35090F, Fingerprint: 52C1 40A7 325F 33B4 7136 2950 20EE 2E87 7A35 090F).\nPerforms header inspection for file format markers and computes Shannon entropy\n(0-8 bits/byte) to identify encrypted payloads vs plain English text.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='target', kind='token', choices=(), optional=False, default=None, help='Text or file to inspect'),),
+        options=(),
+        examples=('/opsec corpus/page_73_an_end.md', '/opsec "-----BEGIN PGP SIGNED MESSAGE-----\\n..."'),
+        handler='run_opsec',
+    ),
+    CommandSpec(
+        name='running-key',
+        aliases=(),
+        syntax='/running-key <page> <text_file> [--mode sub|add|beaufort] [--f-skip] [--offset N]',
+        summary='GF(29) running-key decryption against reference text',
+        description='Evaluates running-key cipher over GF(29) using a canonical reference text.\nSupports standard subtraction (sub), additive (add), and Beaufort modes,\nwith dynamic Fehu-skip simulation where cleartext Fehu does not advance the keystream.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='page', kind='token', choices=(), optional=False, default=None, help='Ciphertext page'), Arg(name='text', kind='token', choices=(), optional=False, default=None, help='Reference text file')),
+        options=(Option(flags=('--mode', '-m'), action='store', type=str, default='sub', choices=('sub', 'add', 'beaufort'), help=''), Option(flags=('--f-skip',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--offset', '-o'), action='store', type=int, default=0, choices=(), help='')),
+        examples=('/running-key 56 corpus/reference_texts/blake_marriage_heaven_hell.txt --mode sub --f-skip', '/running-key 56 emerson_self_reliance.txt --offset 100'),
+        handler='run_running_key',
+    ),
+    CommandSpec(
+        name='running-key-scan',
+        aliases=(),
+        syntax='/running-key-scan <page> [--ref-dir DIR] [--step N] [--top-k N]',
+        summary='Sliding window running-key scan across canonical reference texts',
+        description='Scans all .txt reference texts in corpus/reference_texts/ across shift modes\nand Fehu-skip settings, scoring candidate alignments with calibrated runic models.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='page', kind='token', choices=(), optional=False, default=None, help='Ciphertext page'),),
+        options=(Option(flags=('--ref-dir',), action='store', type=str, default=None, choices=(), help=''), Option(flags=('--step',), action='store', type=int, default=1, choices=(), help=''), Option(flags=('--top-k',), action='store', type=int, default=5, choices=(), help=''), Option(flags=('--limit', '-l'), action='store', type=int, default=None, choices=(), help='')),
+        examples=('/running-key-scan 56', '/running-key-scan 56 --step 2 --top-k 10', '/running-key-scan 56 --limit 5'),
+        handler='run_running_key_scan',
+    ),
+    CommandSpec(
+        name='lexicon',
+        aliases=(),
+        syntax='/lexicon [phrases|words|all] [--limit N]',
+        summary='Inspect master vocabulary, philosophical phrases, and reference words',
+        description='Displays curated multi-word philosophical aphorisms, reference text vocabulary,\nand master cryptanalytic keywords used for crib dragging and key generation.',
+        category='CRYPTANALYSIS & SACRED NUMEROLOGY',
+        args=(Arg(name='action', kind='token', choices=('phrases', 'words', 'all'), optional=True, default='phrases', help=''),),
+        options=(Option(flags=('--limit',), action='store', type=int, default=50, choices=(), help=''),),
+        examples=('/lexicon phrases', '/lexicon words'),
+        handler='run_lexicon',
+    ),
+    CommandSpec(
+        name='key',
+        aliases=('keys',),
+        syntax='/key  OR  /key <provider> <api_key>  OR  /key clear <provider>',
+        summary='AI API key & cloud provider configuration section',
+        description='Opens the dedicated AI API key & cloud provider management section.\nDisplays configured credentials, active provider status, and supported\nmodels. Securely persists keys into .env with restricted file permissions (0600).',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='key_args', kind='greedy_text', choices=(), optional=True, default=None, help='Key arguments'),),
+        options=(),
+        examples=('/key', '/key show', '/key groq gsk_...', '/key openai sk-...', '/key clear groq'),
+        handler='run_key_section',
+    ),
+    CommandSpec(
+        name='think',
+        aliases=(),
+        syntax='/think [on|off]',
+        summary='Toggle Chain-of-Thought (CoT) reasoning for reasoning models',
+        description='Enables or disables Chain-of-Thought reasoning for models that support it\n(such as DeepSeek-R1, Qwen 2.5, Spark-X2.5). When enabled, displays internal\nreasoning trace before providing the final answer.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='state', kind='token', choices=('on', 'off'), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/think on', '/think off', '/think'),
+        handler='run_think',
+    ),
+    CommandSpec(
+        name='boost',
+        aliases=(),
+        syntax='/boost [on|off|status|toggle]',
+        summary='Toggle Deep Cryptanalytic Retrieval & Reranking Boost mode',
+        description='Amplifies cryptographic search relevance and candidate retrieval depth.\nWhen enabled: expands candidate retrieval budget to 10 chunks, multiplies\nFuthorc rune and Gematria keyword lexical match scores by 2.0x, and widens\nprompt context to 4,000 characters for deep multi-page cryptanalysis.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='state', kind='token', choices=('on', 'off', 'status', 'toggle'), optional=True, default='status', help=''),),
+        options=(),
+        examples=('/boost on', '/boost off', '/boost status', '/boost'),
+        handler='run_boost',
+    ),
+    CommandSpec(
+        name='provider',
+        aliases=(),
+        syntax='/provider [name]',
+        summary='Switch active LLM provider (ollama, groq, openai, gemini, anthropic, openrouter)',
+        description='Inspects or changes the active inference provider. Automatically resets\nthe active model to the default model configured for that provider.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='name', kind='token', choices=(), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/provider', '/provider groq', '/provider ollama'),
+        handler='run_provider',
+    ),
+    CommandSpec(
+        name='model',
+        aliases=(),
+        syntax='/model [key_or_name]',
+        summary='Switch active language model key or specify custom model',
+        description='Switches the active LLM. Can specify a registered preset model key\n(lfm, lfm-fast, spark, moe, moe-fast, tiny, light, fast, groq, openai, gemini, claude)\nor provide any custom model name supported by the active provider.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='model_key', kind='token', choices=(), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/model lfm', '/model lfm-fast', '/model spark', '/model llama-3.3-70b-versatile'),
+        handler='run_model',
+    ),
+    CommandSpec(
+        name='host',
+        aliases=(),
+        syntax='/host [url]',
+        summary='Set remote Ollama streaming endpoint host URL',
+        description='Configures the endpoint URL for Ollama streaming. Allows offloading\ninference to a remote GPU server, LAN workstation, or Ollama cloud tunnel.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='url', kind='token', choices=(), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/host http://192.168.1.50:11434', '/host http://localhost:11434'),
+        handler='run_host',
+    ),
+    CommandSpec(
+        name='profile',
+        aliases=(),
+        syntax='/profile [standard|low-spec]',
+        summary='Toggle hardware profile between standard and low-spec memory footprint',
+        description="Adjusts context window parameters for hardware optimization.\n'standard' enables 8,192 token context; 'low-spec' restricts context to\n2,048 tokens to minimize RAM and VRAM usage on resource-constrained devices.",
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='mode', kind='token', choices=('standard', 'low-spec'), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/profile standard', '/profile low-spec'),
+        handler='run_profile',
+    ),
+    CommandSpec(
+        name='cache',
+        aliases=(),
+        syntax='/cache clear',
+        summary='Clear exact RAG response cache in vectordb/.rag_cache.json',
+        description='Flushes all cached deterministic and RAG inference responses,\nforcing subsequent queries to perform fresh retrieval and generation.',
+        category='MODEL, ENGINE & HARDWARE CONFIGURATION',
+        args=(Arg(name='action', kind='token', choices=(), optional=False, default='clear', help=''),),
+        options=(),
+        examples=('/cache clear',),
+        handler='run_cache',
+    ),
+    CommandSpec(
+        name='status',
+        aliases=(),
+        syntax='/status [--probe]',
+        summary='Display system telemetry, provider health, model & corpus metrics',
+        description='Prints real-time workstation status, including active inference provider,\nactive model name, hardware context profile, Chain-of-Thought status,\nCryptanalytic Boost mode, configured API keys, corpus document count,\nindexed vector chunk count, and authentic Cicada PGP identity.',
+        category='TELEMETRY, BENCHMARKING & SYSTEM',
+        args=(),
+        options=(Option(flags=('--probe',), action='store_true', type=str, default=None, choices=(), help='Probe endpoints'),),
+        examples=('/status', '/status --probe'),
+        handler='run_status',
+    ),
+    CommandSpec(
+        name='bench',
+        aliases=(),
+        syntax='/bench [--profile] [--skip-vector] [--llm] [--compare BASELINE] [--save-baseline NAME]',
+        summary='Run microsecond latency benchmark suite & hotspot profiling',
+        description='Executes the Trithemius performance benchmark suite. Measures cryptographic\nprimitive latencies (Agrippa, Kasiski, Al-Kindi, Shannon entropy), BM25 zero-VRAM\nretrieval speed, and vector search. Can run Python cProfile hotspot profiling.',
+        category='TELEMETRY, BENCHMARKING & SYSTEM',
+        args=(),
+        options=(Option(flags=('--profile',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--save-baseline',), action='store', type=str, default=None, choices=(), help=''), Option(flags=('--compare',), action='store', type=str, default=None, choices=(), help=''), Option(flags=('--skip-vector',), action='store_true', type=str, default=None, choices=(), help=''), Option(flags=('--llm',), action='store_true', type=str, default=None, choices=(), help='')),
+        examples=('/bench', '/bench --profile', '/bench --skip-vector'),
+        handler='run_bench',
+    ),
+    CommandSpec(
+        name='clear',
+        aliases=(),
+        syntax='/clear',
+        summary='Clear terminal screen buffer',
+        description='Clears the active terminal window for a clean workspace.',
+        category='TELEMETRY, BENCHMARKING & SYSTEM',
+        args=(),
+        options=(),
+        examples=('/clear',),
+        handler='run_clear',
+    ),
+    CommandSpec(
+        name='help',
+        aliases=(),
+        syntax='/help [command]',
+        summary='Display command manual or detailed help for a specific command',
+        description='Shows the complete command manual categorized by function, or detailed\nsyntax, algorithms, and examples for a specific command.',
+        category='TELEMETRY, BENCHMARKING & SYSTEM',
+        args=(Arg(name='command', kind='token', choices=(), optional=True, default=None, help=''),),
+        options=(),
+        examples=('/help', '/help gematria', '/help vigenere', '/help boost'),
+        handler='print_help',
+    ),
+    CommandSpec(
+        name='exit',
+        aliases=('quit',),
+        syntax='/exit  OR  /quit',
+        summary='Safely exit and disconnect from Trithemius Workstation',
+        description='Terminates the interactive workstation session and returns to shell.',
+        category='TELEMETRY, BENCHMARKING & SYSTEM',
+        args=(),
+        options=(),
+        examples=('/exit', '/quit'),
+        handler='run_exit',
+    ),
+)
+
+
+COMMAND_REGISTRY: Dict[str, CommandSpec] = {}
+for _spec in COMMAND_SPECS:
+    COMMAND_REGISTRY[_spec.name] = _spec
+    for _alias in _spec.aliases:
+        COMMAND_REGISTRY[_alias] = _spec
+
+
+def get_command(name_or_alias: str) -> Optional[CommandSpec]:
+    clean = name_or_alias.strip().lower().lstrip("/")
+    return COMMAND_REGISTRY.get(clean)
+
+
+def get_all_commands() -> Tuple[CommandSpec, ...]:
+    return COMMAND_SPECS
