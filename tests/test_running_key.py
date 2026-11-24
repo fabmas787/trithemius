@@ -5,11 +5,15 @@ and Master Philosophical Phrase Harvester.
 
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+import agents.ledger as ledger
 
 from ciphers.running_key import (
     text_to_rune_indices,
@@ -33,6 +37,44 @@ from ciphers.agrippa import latin_to_rune, INDEX_BY_RUNE, decode_runes, index_to
 
 class TestRunningKeyEngine(unittest.TestCase):
     """Test suite for GF(29) running-key mathematical transformations and keystream conversions."""
+
+    def setUp(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        db_path = os.path.join(tmp_dir.name, "ledger.sqlite3")
+        vector_dir = os.path.join(tmp_dir.name, "vectordb")
+        os.makedirs(vector_dir, exist_ok=True)
+
+        orig_db = ledger.DB_PATH
+        orig_vec = ledger.VECTOR_DIR
+        saved_defaults = []
+        for name in dir(ledger):
+            fn = getattr(ledger, name)
+            if callable(fn) and getattr(fn, "__defaults__", None):
+                defs = fn.__defaults__
+                if orig_db in defs or orig_vec in defs:
+                    saved_defaults.append((fn, defs))
+                    fn.__defaults__ = tuple(
+                        db_path if d == orig_db else (vector_dir if d == orig_vec else d)
+                        for d in defs
+                    )
+
+        ledger._VECTOR_CLIENT = None
+        ledger._VECTOR_COLLECTION = None
+        p_db = patch.object(ledger, "DB_PATH", db_path)
+        p_vec = patch.object(ledger, "VECTOR_DIR", vector_dir)
+        p_db.start()
+        p_vec.start()
+
+        def _cleanup_ledger():
+            ledger._VECTOR_CLIENT = None
+            ledger._VECTOR_COLLECTION = None
+            for fn, defs in saved_defaults:
+                fn.__defaults__ = defs
+
+        self.addCleanup(p_db.stop)
+        self.addCleanup(p_vec.stop)
+        self.addCleanup(_cleanup_ledger)
 
     def test_text_to_rune_indices(self):
         """Converts Latin and Futhorc text to GF(29) rune indices [0..28]."""
@@ -137,7 +179,8 @@ class TestRunningKeyEngine(unittest.TestCase):
         self.assertEqual(top["source_file"], "hermes_emerald_tablet.txt")
 
     def test_ledger_logging(self):
-        """Verify running-key attempts can be safely logged into the database ledger."""
+        """Verify running-key attempts log to canonical_attempts without double-counting."""
+        self.assertEqual(ledger.count_attempts(page="test_page"), 0)
         success = log_running_key_attempt_to_ledger(
             page="test_page",
             source_text="test_reference.txt",
@@ -148,7 +191,23 @@ class TestRunningKeyEngine(unittest.TestCase):
             plaintext="WELCOME PILGRIM",
             passed=True,
         )
-        self.assertIsInstance(success, bool)
+        self.assertTrue(success)
+        self.assertEqual(ledger.count_attempts(page="test_page"), 1)
+        self.assertTrue(ledger.has_been_tried("test_page", "running_key"))
+
+        # Duplicate attempt must not inflate count_attempts()
+        dup = log_running_key_attempt_to_ledger(
+            page="test_page",
+            source_text="test_reference.txt",
+            mode="sub",
+            f_skip=False,
+            offset=0,
+            score=-2.85,
+            plaintext="WELCOME PILGRIM",
+            passed=True,
+        )
+        self.assertFalse(dup)
+        self.assertEqual(ledger.count_attempts(page="test_page"), 1)
 
     def test_edge_cases_and_error_handling(self):
         """Verify boundary values, empty inputs, and error handling paths."""

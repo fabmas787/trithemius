@@ -20,8 +20,25 @@ import math
 import os
 import random
 import re
+import statistics
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import threading
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+
+try:
+    from ciphers.telemetry import (
+        TelemetryEmitter,
+        PhaseStatus,
+        CalcStepEvent,
+        CandidateEvent,
+        CandidateUpdateEvent,
+    )
+except ImportError:
+    TelemetryEmitter = None
+    PhaseStatus = None
+    CalcStepEvent = None
+    CandidateEvent = None
+    CandidateUpdateEvent = None
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
@@ -53,6 +70,8 @@ try:
         analyze_f_skip_periodicity,
     )
     from ciphers.kasiski import prime_totient_stream_decode
+    from ciphers.lagcoinc import passes_sinkov_columnar_ioc_gate
+    from ciphers.unicity import max_unconstrained_periodic_key_length
 except ImportError:
     from agrippa import (
         INDEX_BY_RUNE,
@@ -78,6 +97,8 @@ except ImportError:
         analyze_f_skip_periodicity,
     )
     from kasiski import prime_totient_stream_decode
+    from lagcoinc import passes_sinkov_columnar_ioc_gate
+    from unicity import max_unconstrained_periodic_key_length
 
 try:
     from agents.ledger import (
@@ -1167,8 +1188,9 @@ def solve_interrupter_bigram_exact(
         best_closure = -1e9
         best_last = 0
         S_last = S_fwd[m - 1]
+        R_last = S_reset[m - 1]
         for w in range(M):
-            cand = dp[w] + S_last[w][a]
+            cand = dp[w] + S_last[w][a] + R_last[w][a]
             if cand > best_closure:
                 best_closure = cand
                 best_last = w
@@ -1584,8 +1606,20 @@ def cross_page_running_key_scan(
 # =============================================================================
 
 class SurrogateTestResult(tuple):
-    """Rich tuple (mean_null, std_null, z_score, is_significant) with p_value, p_adj, trials."""
-    def __new__(cls, mean_null, std_null, z_score, is_significant, p_value=1.0, p_adj=1.0, trials=50):
+    """Rich tuple (mean_null, std_null, z_score, is_significant) with p_value, p_adj, e_value, e_value_adj, z_crit, trials."""
+    def __new__(
+        cls,
+        mean_null: float,
+        std_null: float,
+        z_score: float,
+        is_significant: bool,
+        p_value: float = 1.0,
+        p_adj: float = 1.0,
+        trials: int = 50,
+        e_value: float = 1.0,
+        e_value_adj: float = 1.0,
+        z_crit: float = 4.0,
+    ):
         instance = super().__new__(cls, (mean_null, std_null, z_score, is_significant))
         instance.mean_null = mean_null
         instance.std_null = std_null
@@ -1594,12 +1628,102 @@ class SurrogateTestResult(tuple):
         instance.p_value = p_value
         instance.p_adj = p_adj
         instance.trials = trials
+        instance.e_value = e_value
+        instance.e_value_adj = e_value_adj
+        instance.z_crit = z_crit
         return instance
+
+
+def compute_z_crit(n_eff: int) -> float:
+    """Adaptive multiple-testing critical Z threshold: max(4.0, sqrt(2 * ln(N_eff)) + 2.5)."""
+    return max(4.0, math.sqrt(2.0 * math.log(max(n_eff, 1))) + 2.5)
+
+
+def _repair_doublet_excess(shuffled: List[int], max_doublets: int, rng: random.Random) -> None:
+    """In-place lightweight non-adjacent swap repair to preserve low doublet rate in surrogate permutations."""
+    n = len(shuffled)
+    if n < 5:
+        return
+    dup_positions = [i for i in range(n - 1) if shuffled[i] == shuffled[i + 1]]
+    if len(dup_positions) <= max_doublets:
+        return
+    attempts = 0
+    max_attempts = 4 * n
+    while len(dup_positions) > max_doublets and attempts < max_attempts:
+        attempts += 1
+        i = dup_positions[attempts % len(dup_positions)]
+        j = rng.randrange(n)
+        if abs(j - i) <= 2 or abs(j - (i + 1)) <= 1:
+            continue
+        val_move = shuffled[i + 1]
+        val_swap = shuffled[j]
+        if val_move == val_swap:
+            continue
+        # Ensure swap neither keeps old doublet nor creates a new one at i+1 or j
+        if val_swap == shuffled[i] or (i + 2 < n and val_swap == shuffled[i + 2]):
+            continue
+        if (j > 0 and val_move == shuffled[j - 1]) or (j + 1 < n and val_move == shuffled[j + 1]):
+            continue
+        shuffled[i + 1], shuffled[j] = val_swap, val_move
+        dup_positions = [k for k in range(n - 1) if shuffled[k] == shuffled[k + 1]]
+
+
+def _fit_gpd_tail_pvalue(sorted_null: List[float], candidate_score: float, z_score: float) -> float:
+    """
+    Continuous tail p-value via Generalized Pareto Distribution (MoM on top 15% excesses),
+    falling back to normal survival 0.5 * erfc(z / sqrt(2)) when degenerate or outside finite support.
+    """
+    n_null = len(sorted_null)
+    k_tail = min(n_null - 1, max(8, int(math.ceil(0.15 * n_null))))
+    if n_null >= 12 and k_tail >= 5:
+        u = sorted_null[-k_tail - 1]
+        excesses = [x - u for x in sorted_null[-k_tail:] if x > u]
+        if len(excesses) >= 5 and candidate_score > u:
+            m_e = sum(excesses) / len(excesses)
+            v_e = sum((e - m_e) ** 2 for e in excesses) / max(1, len(excesses) - 1)
+            if m_e > 1e-12 and v_e > 1e-12:
+                xi = 0.5 * (1.0 - (m_e * m_e) / v_e)
+                sigma = m_e * (1.0 - xi)
+                y_obs = candidate_score - u
+                if sigma > 1e-12 and -0.5 < xi < 0.5:
+                    p_exceed_u = len(excesses) / float(n_null)
+                    if abs(xi) < 1e-6:
+                        return max(1e-300, min(1.0, p_exceed_u * math.exp(-y_obs / sigma)))
+                    term = 1.0 + (xi * y_obs) / sigma
+                    if term > 0.0:
+                        return max(1e-300, min(1.0, p_exceed_u * (term ** (-1.0 / xi))))
+
+    p_norm = 0.5 * math.erfc(z_score / math.sqrt(2.0))
+    if p_norm <= 0.0 and z_score > 0.0:
+        return 1e-300
+    return max(1e-300, min(1.0, p_norm))
+
+
+def _calibrated_e_value(p_value: float, n_eff: int = 1) -> Tuple[float, float]:
+    """Vovk-Wang kappa=0.5 admissible p-to-e calibrator with multiple-testing adjustment."""
+    p_safe = max(1e-300, min(1.0, p_value))
+    e_val = min(1e100, 0.5 * (p_safe ** -0.5))
+    e_adj = min(1e100, e_val / max(1, n_eff))
+    return e_val, e_adj
+
+
+def _sidak_or_bonferroni_padj(p_value: float, n_eff: int, bonferroni: bool = False) -> float:
+    """Numerically stable multiple-testing adjusted p-value preserving p_adj >= p_value."""
+    k = max(1, n_eff)
+    if p_value <= 0.0:
+        return 0.0
+    if p_value >= 1.0:
+        return 1.0
+    if bonferroni or p_value < 1e-9:
+        p_adj = min(1.0, p_value * k)
+    else:
+        p_adj = min(1.0, -math.expm1(k * math.log1p(-p_value)))
+    return max(p_value, p_adj)
 
 
 def sequential_mc_pvalue(
     stat_obs: float,
-    shuffle_stat_fn,
+    shuffle_stat_fn: Callable[[], float],
     h: int = 10,
     n_max: int = 1000,
     rng: Optional[random.Random] = None,
@@ -1643,23 +1767,30 @@ def surrogate_shuffle_test(
     family: Optional[str] = None,
     n_trials: int = 1,
     seed: Optional[int] = 3301,
+    n_eff: Optional[int] = None,
 ) -> SurrogateTestResult:
     """
-    Monte Carlo surrogate-data null distribution test.
-    Supports fixed-N shuffle evaluation or Besag-Clifford sequential Monte Carlo early-stopping.
-    Uses an isolated local PRNG instance to guarantee global random state isolation.
-    Computes empirical mean, standard deviation, Z-score, empirical p-value, and
-    multi-testing adjusted p-value (Bonferroni if n_trials > 1, else Sidak via ledger count).
+    Monte Carlo surrogate-data null distribution test with doublet-preserving permutation
+    repair, continuous GPD/normal tail p-values when exceedances == 0, calibrated e-values,
+    and adaptive Z_crit(N_eff) thresholding.
     """
-    if len(indices) < 4:
-        return SurrogateTestResult(0.0, 0.0, 0.0, False, p_value=1.0, p_adj=1.0, trials=0)
+    n = len(indices)
+    if n < 4:
+        return SurrogateTestResult(0.0, 0.0, 0.0, False, p_value=1.0, p_adj=1.0, trials=0, e_value=1.0, e_value_adj=1.0, z_crit=4.0)
 
     rng = random.Random(seed if seed is not None else 3301)
-    null_scores = []
+    null_scores: List[float] = []
     shuffled = list(indices)
 
-    def draw_shuffle():
+    orig_doublets = sum(1 for i in range(n - 1) if indices[i] == indices[i + 1])
+    orig_doublet_rate = orig_doublets / max(1, n - 1)
+    preserve_doublets = orig_doublet_rate < 0.015
+    max_allowed_doublets = orig_doublets + 1
+
+    def draw_shuffle() -> float:
         rng.shuffle(shuffled)
+        if preserve_doublets:
+            _repair_doublet_excess(shuffled, max_allowed_doublets, rng)
         s = score_composite_runes(shuffled)
         null_scores.append(s)
         return s
@@ -1677,28 +1808,38 @@ def surrogate_shuffle_test(
             draw_shuffle()
         exceedances = sum(1 for s in null_scores if s >= candidate_score)
         total_trials = len(null_scores)
-        p_val = round((exceedances + 1.0) / (total_trials + 1.0), 5)
+        p_val = (exceedances + 1.0) / (total_trials + 1.0)
 
     mean_null = sum(null_scores) / len(null_scores)
     variance = sum((s - mean_null) ** 2 for s in null_scores) / len(null_scores)
     std_null = math.sqrt(variance) if variance > 1e-9 else 0.01
-
     z_score = (candidate_score - mean_null) / std_null
 
-    # Multi-testing correction: Bonferroni for n_trials > 1, else Sidak correction against ledger attempts
-    if n_trials > 1:
-        p_adj = round(min(1.0, p_val * n_trials), 5)
+    if exceedances == 0:
+        p_val = _fit_gpd_tail_pvalue(sorted(null_scores), candidate_score, z_score)
     else:
-        attempt_k = 1
-        if count_attempts:
-            try:
-                attempt_k = max(1, count_attempts(family=family))
-            except Exception:
-                attempt_k = 1
-        # Sidak correction: 1 - (1 - p)^K
-        p_adj = round(1.0 - math.pow(max(0.0, 1.0 - p_val), attempt_k), 5)
+        p_val = round(p_val, 6)
 
-    is_significant = (z_score >= 3.5 or p_adj < 0.01) and candidate_score >= -3.40
+    attempt_k = 1
+    if n_trials <= 1 and count_attempts:
+        try:
+            attempt_k = max(1, count_attempts(family=family))
+        except (OSError, RuntimeError, ValueError):
+            attempt_k = 1
+
+    eff_trials = max(1, int(n_eff)) if n_eff is not None else (n_trials if n_trials > 1 else attempt_k)
+    p_adj = _sidak_or_bonferroni_padj(p_val, eff_trials, bonferroni=(n_trials > 1 or n_eff is not None))
+    if p_adj >= 1e-4:
+        p_adj = round(p_adj, 6)
+
+    e_val, e_val_adj = _calibrated_e_value(p_val, eff_trials)
+    z_crit = compute_z_crit(eff_trials)
+    score_floor = -2.85 if n < 100 else -2.75
+    is_significant = (
+        (z_score >= z_crit)
+        and (p_adj < 0.01 or e_val_adj >= 100.0)
+        and (candidate_score >= score_floor)
+    )
 
     return SurrogateTestResult(
         round(mean_null, 4),
@@ -1708,7 +1849,512 @@ def surrogate_shuffle_test(
         p_value=p_val,
         p_adj=p_adj,
         trials=total_trials,
+        e_value=e_val,
+        e_value_adj=e_val_adj,
+        z_crit=round(z_crit, 4),
     )
+
+
+# =============================================================================
+# 9b. Structural & Out-of-Sample Validation Gates
+# =============================================================================
+
+_WORD_SEP_CHARS = frozenset({"•", "᛫", "᛬", "᛭"})
+
+
+def _extract_word_boundaries(target_text: str, total_runes: int) -> List[int]:
+    """Map Futhorc word separators or whitespace in target_text to rune split positions in 1..total_runes-1."""
+    if not target_text or total_runes < 2:
+        return []
+    has_runes = any(c in INDEX_BY_RUNE for c in target_text)
+    source = target_text if has_runes else latin_to_rune(target_text)
+    bounds: Set[int] = set()
+    r_pos = 0
+    src_len = len(source)
+    for idx, ch in enumerate(source):
+        if ch in INDEX_BY_RUNE:
+            r_pos += 1
+        elif ch == "\n":
+            prev_is_rune = idx > 0 and source[idx - 1] in INDEX_BY_RUNE
+            next_is_rune = idx + 1 < src_len and source[idx + 1] in INDEX_BY_RUNE
+            if not (prev_is_rune and next_is_rune) and 0 < r_pos < total_runes:
+                bounds.add(r_pos)
+        elif ch in _WORD_SEP_CHARS or ch.isspace():
+            if 0 < r_pos < total_runes:
+                bounds.add(r_pos)
+    return sorted(bounds)
+
+
+def _format_decrypted_with_separators(dec_indices: Sequence[int], target_text: str) -> Tuple[str, str]:
+    """Reconstruct decrypted runes and spaced Latin text preserving word separators from target_text."""
+    if not dec_indices:
+        return "", ""
+    has_runes = any(c in INDEX_BY_RUNE for c in target_text)
+    template = target_text if has_runes else latin_to_rune(target_text)
+    out_runes: List[str] = []
+    ptr = 0
+    n_dec = len(dec_indices)
+    for ch in template:
+        if ch in INDEX_BY_RUNE:
+            if ptr < n_dec:
+                out_runes.append(index_to_rune(dec_indices[ptr]))
+                ptr += 1
+        elif ch in _WORD_SEP_CHARS or ch.isspace():
+            out_runes.append(ch)
+    if ptr < n_dec:
+        out_runes.extend(index_to_rune(i) for i in dec_indices[ptr:])
+    rune_str = re.sub(r"\n{3,}", "\n\n", "".join(out_runes)).strip()
+    if not any(c in _WORD_SEP_CHARS or c.isspace() for c in rune_str):
+        rune_str = indices_to_runes(list(dec_indices))
+    return rune_str, decode_runes(rune_str)
+
+
+def viterbi_f_skip_decode(indices: Sequence[int], key_shifts: Sequence[int]) -> Tuple[List[int], Set[int], float]:
+    """
+    Exact O(n * p) Viterbi decoding under cleartext Fehu ('ᚠ' == 0) skip Vigenère:
+    distinguishes true cleartext Fehu pass-through skips from accidental ciphertext Fehus.
+    Returns (decoded_indices, inferred_skip_positions, normalized_log_score).
+    """
+    n = len(indices)
+    p = len(key_shifts)
+    if n == 0 or p == 0:
+        return [], set(), -999.0
+
+    L2 = RUNIC_BIGRAM_LOGP
+    L1 = RUNIC_UNIGRAM_LOGP
+    c0 = indices[0]
+    states: Dict[Tuple[int, int], Tuple[float, bool, Optional[Tuple[int, int]]]] = {}
+    back: List[Dict[Tuple[int, int], Tuple[bool, Optional[Tuple[int, int]]]]] = [{} for _ in range(n)]
+
+    if c0 != 0:
+        p0 = (c0 - key_shifts[0]) % M
+        states[(1 % p, p0)] = (0.4 * L1[p0], False, None)
+    else:
+        states[(0, 0)] = (0.4 * L1[0], True, None)
+        p0_ns = (-key_shifts[0]) % M
+        if p0_ns != 0:
+            states[(1 % p, p0_ns)] = (0.4 * L1[p0_ns], False, None)
+    back[0] = {k: (v[1], v[2]) for k, v in states.items()}
+
+    for i in range(1, n):
+        ci = indices[i]
+        nxt: Dict[Tuple[int, int], Tuple[float, bool, Optional[Tuple[int, int]]]] = {}
+        for (ptr, prev_p), (sc, _, _) in states.items():
+            if ci != 0:
+                pi = (ci - key_shifts[ptr]) % M
+                nptr = (ptr + 1) % p
+                nsc = sc + 0.6 * L2[prev_p][pi] + 0.4 * L1[pi]
+                st = (nptr, pi)
+                if st not in nxt or nsc > nxt[st][0]:
+                    nxt[st] = (nsc, False, (ptr, prev_p))
+            else:
+                nsc_s = sc + 0.6 * L2[prev_p][0] + 0.4 * L1[0]
+                st_s = (ptr, 0)
+                if st_s not in nxt or nsc_s > nxt[st_s][0]:
+                    nxt[st_s] = (nsc_s, True, (ptr, prev_p))
+                pi_ns = (-key_shifts[ptr]) % M
+                if pi_ns != 0:
+                    nptr = (ptr + 1) % p
+                    nsc_ns = sc + 0.6 * L2[prev_p][pi_ns] + 0.4 * L1[pi_ns]
+                    st_ns = (nptr, pi_ns)
+                    if st_ns not in nxt or nsc_ns > nxt[st_ns][0]:
+                        nxt[st_ns] = (nsc_ns, False, (ptr, prev_p))
+        states = nxt
+        back[i] = {k: (v[1], v[2]) for k, v in states.items()}
+
+    if not states:
+        return list(indices), set(), -999.0
+
+    best_st = max(states.keys(), key=lambda k: states[k][0])
+    best_sc = states[best_st][0] / max(1, n)
+    dec = [0] * n
+    skips: Set[int] = set()
+    curr: Optional[Tuple[int, int]] = best_st
+    for i in range(n - 1, -1, -1):
+        assert curr is not None
+        is_skip, prev_st = back[i][curr]
+        dec[i] = curr[1]
+        if is_skip:
+            skips.add(i)
+        curr = prev_st
+    return dec, skips, round(best_sc, 4)
+
+
+def _longest_fehu_free_segments(indices: Sequence[int], min_len: int = 8) -> List[Tuple[int, int]]:
+    """Return top contiguous Fehu-free spans (start, end) sorted longest first."""
+    segs: List[Tuple[int, int]] = []
+    start = 0
+    for i, val in enumerate(indices):
+        if val == 0:
+            if i - start >= min_len:
+                segs.append((start, i))
+            start = i + 1
+    if len(indices) - start >= min_len:
+        segs.append((start, len(indices)))
+    segs.sort(key=lambda ab: -(ab[1] - ab[0]))
+    return segs
+
+
+def solve_f_skip_periodic_exact(indices: Sequence[int], period: int) -> Tuple[List[int], List[int], Set[int], float]:
+    """
+    Lightweight cleartext F-skip Vigenère periodic solver:
+    combines solve_interrupter_bigram_exact(InterrupterConfig.fehu_skip()) with
+    Fehu-free segment exact periodic fitting + cyclic rotation Viterbi F-skip decoding.
+    Returns (best_key, decoded_indices, skip_positions, raw_score).
+    """
+    idx_list = list(indices)
+    n = len(idx_list)
+    if n < 2 or period <= 0:
+        return [0] * max(1, period), idx_list, set(), -999.0
+
+    best_key: List[int] = [0] * period
+    best_dec: List[int] = idx_list
+    best_skips: Set[int] = set()
+    best_score = -999.0
+
+    def _try_key(cand_k: List[int]) -> None:
+        nonlocal best_key, best_dec, best_skips, best_score
+        dec, skips, _ = viterbi_f_skip_decode(idx_list, cand_k)
+        sc = score_composite_runes(dec)
+        if sc > best_score:
+            best_score = sc
+            best_key = list(cand_k)
+            best_dec = dec
+            best_skips = skips
+
+    # 1. Standard all-Fehu pause hypothesis
+    k_naive, _ = solve_interrupter_bigram_exact(idx_list, period, config=InterrupterConfig.fehu_skip())
+    _try_key(k_naive)
+
+    # 2. Longest Fehu-free segment(s) exact periodic fit + cyclic rotations (resilient to accidental ct Fehus)
+    segs = _longest_fehu_free_segments(idx_list, min_len=max(8, period + 2))
+    for s0, s1 in segs[:2]:
+        k_seg, _ = solve_periodic_bigram_exact(idx_list[s0:s1], period)
+        for r in range(period):
+            _try_key(k_seg[r:] + k_seg[:r])
+
+    return best_key, best_dec, best_skips, best_score
+
+
+def _extract_cand_decrypted_indices(cand: Dict[str, Any], indices: Sequence[int]) -> List[int]:
+    """Extract full decrypted rune index stream from a candidate dict without resetting key phase."""
+    pr = cand.get("plaintext_runes", "")
+    if isinstance(pr, str) and pr:
+        dec = clean_runes_to_indices(pr)
+        if dec:
+            return dec
+    pl = cand.get("plaintext_latin", "")
+    if isinstance(pl, str) and pl:
+        dec = clean_runes_to_indices(pl)
+        if dec:
+            return dec
+    ks = cand.get("key_shifts") or []
+    if ks:
+        p = len(ks)
+        return [(indices[i] - ks[i % p]) % M for i in range(len(indices))]
+    return list(indices)
+
+
+def evaluate_piecewise_key_consistency(
+    cand: Dict[str, Any],
+    target_text: str,
+    indices: Sequence[int],
+    null_mean: float,
+    null_std: float,
+) -> Dict[str, Any]:
+    """
+    Piecewise multi-segment key consistency ('check a pezzi'):
+    splits the candidate's full decrypted rune stream near word boundaries into K adaptive
+    segments (K=1..4) without resetting key phase, and verifies uniform linguistic consistency.
+    """
+    dec_indices = _extract_cand_decrypted_indices(cand, indices)
+    n = len(dec_indices)
+    if n < 4:
+        return {
+            "k_segments": 1,
+            "segment_scores": [],
+            "segment_z_scores": [],
+            "segment_bounds": [],
+            "min_segment_score": -999.0,
+            "mean_segment_score": -999.0,
+            "segment_score_std": 0.0,
+            "consistent_segment_ratio": 0.0,
+            "best_phase_shift": None,
+            "best_phase_shift_jump": 0.0,
+            "segment_consistency_ok": False,
+        }
+
+    k_segs = 1 if n < 80 else (2 if n < 140 else (3 if n < 220 else 4))
+    if k_segs == 1:
+        bounds = [(0, n)]
+    else:
+        word_bounds = _extract_word_boundaries(target_text, n)
+        splits = [0]
+        min_seg = max(10, n // (2 * k_segs))
+        tol = max(10, n // (3 * k_segs))
+        for j in range(1, k_segs):
+            ideal = round(j * n / k_segs)
+            lo = splits[-1] + min_seg
+            hi = n - (k_segs - j) * min_seg
+            if lo > hi:
+                lo = min(splits[-1] + 1, n - 1)
+                hi = n - 1
+            near = [b for b in word_bounds if lo <= b <= hi and abs(b - ideal) <= tol]
+            chosen = min(near, key=lambda b: abs(b - ideal)) if near else max(lo, min(hi, ideal))
+            splits.append(chosen)
+        splits.append(n)
+        bounds = [(splits[j], splits[j + 1]) for j in range(k_segs)]
+
+    seg_scores: List[float] = []
+    seg_zs: List[float] = []
+    for a, b in bounds:
+        s_j = score_composite_runes(dec_indices[a:b])
+        z_j = round((s_j - null_mean) / null_std, 2) if null_std > 1e-6 else 0.0
+        seg_scores.append(s_j)
+        seg_zs.append(z_j)
+
+    min_s = round(min(seg_scores), 4)
+    mean_s = round(sum(seg_scores) / len(seg_scores), 4)
+    std_s = round(math.sqrt(sum((s - mean_s) ** 2 for s in seg_scores) / len(seg_scores)), 4)
+    consistent_ratio = round(sum(1 for s in seg_scores if s >= -3.35) / len(seg_scores), 4)
+
+    # Diagnostic metadata for periodic candidates with K >= 2
+    best_phase_shift: Optional[int] = None
+    best_jump = 0.0
+    period = int(cand.get("period", 0) or 0)
+    key_shifts = cand.get("key_shifts") or []
+    if k_segs >= 2 and period >= 2 and len(key_shifts) == period and len(indices) >= n:
+        is_beaufort = "BEAUFORT" in str(cand.get("method", "")).upper() and "VARIANT" not in str(cand.get("method", "")).upper()
+        best_jump_val = -999.0
+        for delta in range(1, period):
+            for seg_idx, (a, b) in enumerate(bounds):
+                if is_beaufort:
+                    alt_dec = [(key_shifts[(i + delta) % period] - indices[i]) % M for i in range(a, b)]
+                else:
+                    alt_dec = [(indices[i] - key_shifts[(i + delta) % period]) % M for i in range(a, b)]
+                jump = score_composite_runes(alt_dec) - seg_scores[seg_idx]
+                if jump > best_jump_val:
+                    best_jump_val = jump
+                    best_phase_shift = delta
+        best_jump = round(best_jump_val, 4) if best_jump_val > -998.0 else 0.0
+
+    consistency_ok = (k_segs == 1) or (min_s >= -3.65 and consistent_ratio >= 0.65)
+    return {
+        "k_segments": k_segs,
+        "segment_scores": seg_scores,
+        "segment_z_scores": seg_zs,
+        "segment_bounds": bounds,
+        "min_segment_score": min_s,
+        "mean_segment_score": mean_s,
+        "segment_score_std": std_s,
+        "consistent_segment_ratio": consistent_ratio,
+        "best_phase_shift": best_phase_shift,
+        "best_phase_shift_jump": best_jump,
+        "segment_consistency_ok": consistency_ok,
+    }
+
+
+def _solve_periodic_by_kind(seq: Sequence[int], period: int, solver_kind: str) -> List[int]:
+    """Dispatch periodic key fitting by solver variant name."""
+    seq_list = list(seq)
+    kind = solver_kind.upper()
+    if kind == "SEPARABLE_UNIGRAM":
+        return solve_separable_key(compute_t_table(seq_list, period))
+    if kind == "MIC_GAUGE":
+        k_mic, _ = align_columns_mic(seq_list, period)
+        return k_mic
+    if kind == "HILL_CLIMBING":
+        k_ex, _ = solve_periodic_bigram_exact(seq_list, period)
+        k_hc, _ = hill_climbing_coupled(seq_list, period, start_key=k_ex, restarts=2)
+        return k_hc
+    if kind == "FSKIP_EXACT_BIGRAM":
+        k_fs, _, _, _ = solve_f_skip_periodic_exact(seq_list, period)
+        return k_fs
+    k_ex, _ = solve_periodic_bigram_exact(seq_list, period)
+    return k_ex
+
+
+def validate_periodic_holdout(
+    indices: Sequence[int],
+    period: int,
+    solver_kind: str = "EXACT_BIGRAM",
+    null_mean: Optional[float] = None,
+    null_std: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Split-half out-of-sample holdout validation for unconstrained periodic candidates.
+    Splits at m_split = (n // (2 * period)) * period to preserve phase alignment,
+    fits on each half, and scores the opposite half.
+    """
+    n = len(indices)
+    if period <= 1 or n < 4 * period or n < 100:
+        return {
+            "applicable": False,
+            "period": period,
+            "solver_kind": solver_kind,
+            "holdout_score_1": None,
+            "holdout_score_2": None,
+            "mean_holdout_score": None,
+            "mean_holdout_z": None,
+            "holdout_ok": True,
+        }
+
+    idx_list = list(indices)
+    if null_mean is None or null_std is None:
+        base_sig = surrogate_shuffle_test(idx_list, -4.0, n_shuffles=25, seed=3301)
+        null_mean = base_sig.mean_null
+        null_std = base_sig.std_null
+
+    m_split = (n // (2 * period)) * period
+    half1 = idx_list[:m_split]
+    half2 = idx_list[m_split:]
+
+    k1 = _solve_periodic_by_kind(half1, period, solver_kind)
+    k2 = _solve_periodic_by_kind(half2, period, solver_kind)
+
+    if solver_kind.upper() == "FSKIP_EXACT_BIGRAM":
+        # Unknown number of F-skips in first half can shift half2 phase by r in 0..p-1
+        s2 = max(
+            score_composite_runes(viterbi_f_skip_decode(half2, k1[r:] + k1[:r])[0])
+            for r in range(period)
+        )
+        s1 = score_composite_runes(viterbi_f_skip_decode(half1, k2)[0])
+        if s1 < -3.30:
+            s1 = max(
+                score_composite_runes(viterbi_f_skip_decode(half1, k2[r:] + k2[:r])[0])
+                for r in range(period)
+            )
+    else:
+        dec2 = [(half2[i] - k1[i % period]) % M for i in range(len(half2))]
+        dec1 = [(half1[i] - k2[i % period]) % M for i in range(len(half1))]
+        s2 = score_composite_runes(dec2)
+        s1 = score_composite_runes(dec1)
+
+    mean_score = round((s1 + s2) / 2.0, 4)
+    mean_z = round((mean_score - null_mean) / null_std, 2) if null_std > 1e-6 else 0.0
+    holdout_ok = (mean_z >= 3.0) and (mean_score >= -3.30)
+
+    return {
+        "applicable": True,
+        "period": period,
+        "solver_kind": solver_kind,
+        "m_split": m_split,
+        "holdout_score_1": s1,
+        "holdout_score_2": s2,
+        "mean_holdout_score": mean_score,
+        "mean_holdout_z": mean_z,
+        "holdout_ok": holdout_ok,
+    }
+
+
+def validate_column_key_sensitivity(
+    indices: Sequence[int],
+    key_shifts: Sequence[int],
+    skip_indices: Optional[Set[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Leave-One-Column-Out (LOCO) column sensitivity ('cliff') check for period p > 2.
+    Perturbs each column k_j -> (k_j + delta) % 29 and verifies at least 80% of columns
+    produce a meaningful score drop Delta_j > 0.25 / p relative to median perturbation.
+    """
+    p = len(key_shifts)
+    n = len(indices)
+    if p <= 2 or n < 4:
+        return {
+            "applicable": False,
+            "period": p,
+            "column_deltas": [],
+            "threshold": 0.0,
+            "active_columns": p,
+            "active_column_ratio": 1.0,
+            "column_cliff_ok": True,
+        }
+
+    idx_list = list(indices)
+    ks_base = [int(k) % M for k in key_shifts]
+
+    def _decode_with_key(ks: List[int]) -> List[int]:
+        if skip_indices is None:
+            return [(idx_list[i] - ks[i % p]) % M for i in range(n)]
+        out: List[int] = []
+        ptr = 0
+        for i, c_val in enumerate(idx_list):
+            if i in skip_indices and c_val == 0:
+                out.append(0)
+            else:
+                out.append((c_val - ks[ptr % p]) % M)
+                ptr += 1
+        return out
+
+    base_score = score_composite_runes(_decode_with_key(ks_base))
+    deltas: List[float] = []
+    for j in range(p):
+        orig_kj = ks_base[j]
+        perturbed_scores: List[float] = []
+        trial_k = list(ks_base)
+        for delta in range(1, M):
+            trial_k[j] = (orig_kj + delta) % M
+            perturbed_scores.append(score_composite_runes(_decode_with_key(trial_k)))
+        med_s = statistics.median(perturbed_scores)
+        deltas.append(round(base_score - med_s, 4))
+
+    thresh = 0.25 / p
+    active_cols = sum(1 for d in deltas if d > thresh)
+    active_ratio = round(active_cols / p, 4)
+    return {
+        "applicable": True,
+        "period": p,
+        "column_deltas": deltas,
+        "threshold": round(thresh, 5),
+        "active_columns": active_cols,
+        "active_column_ratio": active_ratio,
+        "column_cliff_ok": active_ratio >= 0.80,
+    }
+
+
+def _estimate_optimizer_matched_null(
+    indices: Sequence[int],
+    period: int,
+    solver_kind: str,
+    cache: Dict[Tuple[int, int, str], Tuple[float, float]],
+    n_surrogates: int = 20,
+    seed: int = 3301,
+) -> Tuple[float, float]:
+    """
+    Estimate optimizer-matched null (mean, std) by running the same periodic solver
+    on M=20 doublet-preserving shuffled surrogates, cached per (n, period, solver_kind).
+    """
+    n = len(indices)
+    kind = solver_kind.upper()
+    cache_key = (n, period, kind)
+    if cache_key in cache:
+        return cache[cache_key]
+
+    rng = random.Random(seed + period * 17)
+    shuffled = list(indices)
+    orig_doublets = sum(1 for i in range(n - 1) if indices[i] == indices[i + 1])
+    preserve_doublets = (orig_doublets / max(1, n - 1)) < 0.015
+    max_allowed_doublets = orig_doublets + 1
+
+    null_scores: List[float] = []
+    for _ in range(n_surrogates):
+        rng.shuffle(shuffled)
+        if preserve_doublets:
+            _repair_doublet_excess(shuffled, max_allowed_doublets, rng)
+        if kind == "FSKIP_EXACT_BIGRAM":
+            _, dec, _, sc = solve_f_skip_periodic_exact(shuffled, period)
+            null_scores.append(sc)
+        else:
+            k_sh = _solve_periodic_by_kind(shuffled, period, kind)
+            dec = [(shuffled[i] - k_sh[i % period]) % M for i in range(n)]
+            null_scores.append(score_composite_runes(dec))
+
+    mu = sum(null_scores) / len(null_scores)
+    var = sum((s - mu) ** 2 for s in null_scores) / len(null_scores)
+    std = math.sqrt(var) if var > 1e-9 else 0.01
+    result = (round(mu, 4), round(std, 4))
+    cache[cache_key] = result
+    return result
 
 
 # =============================================================================
@@ -1727,92 +2373,252 @@ def crack_liber_primus(
     use_metal: bool = True,
     use_ane: bool = True,
     compound: bool = False,
+    progress_callback: Optional[Callable[[Any], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> dict:
     """
     Full end-to-end staged cascade solver:
     1. Triage analysis (IC, kappa, bigram IC, classification)
     2. Key length consensus (Kasiski, difference periodogram, column IoC)
-    3. Periodic Vigenère (Separable T-table, MIC gauge alignment, coupled hill climbing)
-    4. Dictionary attack via T-table trick
-    5. Deterministic stream sweeps (totients, primes, Fibonacci, counters with Fehu skip)
-    6. Crib dragging with Berlekamp-Massey and stream hash bank
-    7. (Deep mode): 812-space affine mod 29, autokey, and cross-page running key
-    8. Surrogate shuffle significance validation & SQLite ledger persistence
+    3. Canonical Solved Liber Primus Methods
+    4. Periodic Vigenère (Separable T-table, MIC gauge alignment, coupled hill climbing)
+    5. Dictionary attack via T-table trick
+    6. Beaufort T-Table Dictionary Matching
+    7. Apple Silicon Metal GPU Compound Key Sweeps (w1 + w2)
+    8. Deterministic stream sweeps (totients, primes, Fibonacci, counters with Fehu skip)
+    9. Crib dragging with Berlekamp-Massey and stream hash bank
+    10. Surrogate shuffle significance validation & SQLite ledger persistence
     """
+    emitter = TelemetryEmitter(progress_callback) if TelemetryEmitter else None
+    calc_steps: List[Dict[str, Any]] = []
+
+    def _emit_calc(stage: str, module: str, formula: str, inputs: Dict[str, Any], result: str, verdict: str = "INFO"):
+        c_dict = {
+            "stage": stage,
+            "module": module,
+            "formula": formula,
+            "inputs": inputs,
+            "result": result,
+            "verdict": verdict,
+        }
+        calc_steps.append(c_dict)
+        if emitter:
+            emitter.emit_calc(stage, module, formula, inputs, result, verdict)
+
+    def _check_cancelled(phase_id: int, phase_name: str) -> bool:
+        if cancel_event is not None and cancel_event.is_set():
+            if emitter:
+                emitter.emit_phase(phase_id, 10, phase_name, PhaseStatus.CANCELLED, message="Calculation cancelled by user")
+            return True
+        return False
+
+    # Support passing a transcript file path directly (single line < 260 chars, os.path.isfile)
+    if isinstance(target_text, str):
+        stripped_target = target_text.strip()
+        if "\n" not in stripped_target and len(stripped_target) < 260:
+            file_candidate: Optional[str] = None
+            if os.path.isfile(stripped_target):
+                file_candidate = stripped_target
+            else:
+                rel_candidate = os.path.join(BASE_DIR, stripped_target)
+                if ("/" in stripped_target or stripped_target.endswith((".md", ".txt"))) and os.path.isfile(rel_candidate):
+                    file_candidate = rel_candidate
+            if file_candidate is not None:
+                if page_id is None:
+                    page_id = stripped_target
+                try:
+                    from ciphers.solved_pages import extract_runes_from_file
+                    target_text = extract_runes_from_file(file_candidate)
+                except (ImportError, OSError):
+                    try:
+                        from solved_pages import extract_runes_from_file
+                        target_text = extract_runes_from_file(file_candidate)
+                    except (ImportError, OSError):
+                        with open(file_candidate, "r", encoding="utf-8", errors="ignore") as fp:
+                            target_text = fp.read()
+
     indices = clean_runes_to_indices(target_text)
     n = len(indices)
     page_key = page_id or "unsolved"
+    candidates: List[Dict[str, Any]] = []
+    lambda_mdl = 0.20
 
     # Step 1: Triage
+    if _check_cancelled(1, "Triage & Statistical Classification"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": [], "winner": None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(1, 10, "Triage & Statistical Classification", PhaseStatus.STARTED)
     triage = triage_cipher(target_text)
+    ic_val = triage.get("ic", 0.0)
+    kap_val = triage.get("normalized_kappa", 0.0)
+    ent_val = triage.get("conditional_entropy", 0.0)
+    _emit_calc(
+        stage="Phase 1: Triage",
+        module="entropy / kasiski",
+        formula="IC = sum(f_i * (f_i - 1)) / (N * (N - 1)); kappa = IC / IC_random",
+        inputs={"N": n, "IC": round(ic_val, 4), "kappa": round(kap_val, 4), "Cond. Entropy": round(ent_val, 4)},
+        result=f"Classification: {triage.get('classification', 'N/A')} (IC={ic_val:.4f}, kappa={kap_val:.4f}, Cond. Entropy={ent_val:.4f})",
+        verdict="PASS" if kap_val > 1.1 else "INFO",
+    )
+    if emitter:
+        emitter.emit_phase(1, 10, "Triage & Statistical Classification", PhaseStatus.COMPLETED)
 
     # Step 2: Period estimation
+    if _check_cancelled(2, "Key Length Consensus & Periodogram Comb"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": [], "winner": None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(2, 10, "Key Length Consensus & Periodogram Comb", PhaseStatus.STARTED)
     periods = consensus_key_length_estimation(target_text)
     top_period = periods[0][0] if periods else 1
+    _emit_calc(
+        stage="Phase 2: Period Estimation",
+        module="kasiski / lagcoinc",
+        formula="Consensus: argmax_m (Kasiski weighted GCD * Periodogram Comb * Column IoC)",
+        inputs={"max_period": 30, "top_period": top_period, "top_5": [p[0] for p in periods[:5]]},
+        result=f"Top candidate periods: {[p[0] for p in periods[:5]]}",
+        verdict="INFO",
+    )
+    if emitter:
+        emitter.emit_phase(2, 10, "Key Length Consensus & Periodogram Comb", PhaseStatus.COMPLETED)
 
-    candidates = []
+    # Calibrate surrogate null baseline on ciphertext indices for real-time candidate Z-scores
+    null_mean = -3.45
+    null_std = 0.15
+    try:
+        baseline_sig = surrogate_shuffle_test(indices, -4.0, n_shuffles=30, seed=3301)
+        if baseline_sig and baseline_sig.std_null > 1e-6:
+            null_mean = baseline_sig.mean_null
+            null_std = baseline_sig.std_null
+    except (ValueError, ZeroDivisionError, RuntimeError):
+        pass
 
-    # Step 2b: Test Canonical Solved Liber Primus Methods (Reference Ground Truth)
+    def _register_candidate(cand: dict) -> None:
+        cand_id = f"cand_{len(candidates) + 1}"
+        cand["candidate_id"] = cand_id
+        cand.setdefault("tier", 1)
+        if (
+            not any(c in _WORD_SEP_CHARS or c.isspace() for c in cand.get("plaintext_runes", ""))
+            and any(c in _WORD_SEP_CHARS or c.isspace() for c in target_text)
+        ):
+            dec_idx = _extract_cand_decrypted_indices(cand, indices)
+            p_runes, p_latin = _format_decrypted_with_separators(dec_idx, target_text)
+            cand["plaintext_runes"] = p_runes
+            cand["plaintext_latin"] = p_latin
+        score = float(cand.get("score", 0.0))
+        cand.setdefault("raw_score", score)
+        cand["cipher_name"] = cand.get("method", "UNKNOWN")
+        z = (score - null_mean) / null_std if null_std > 1e-6 else 0.0
+        cand["z_score"] = round(z, 2)
+        candidates.append(cand)
+        if emitter:
+            emitter.emit_candidate(
+                candidate_id=cand_id,
+                method=cand.get("method", "UNKNOWN"),
+                key=str(cand.get("key_latin") or cand.get("key_runes") or ""),
+                score=score,
+                threshold=None,
+                plaintext_preview=cand.get("plaintext_latin", "")[:80],
+                z_score=round(z, 2),
+                metadata={"period": cand.get("period", 0), "tier": cand.get("tier", 1)},
+            )
+
+    def _register_dec_candidate(
+        method: str,
+        dec_indices: Sequence[int],
+        key_shifts: Sequence[int],
+        key_runes: str,
+        key_latin: str,
+        period: int,
+        tier: int = 1,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        dec_list = list(dec_indices)
+        raw_sc = score_composite_runes(dec_list)
+        if tier == 2 and period > 0:
+            sc = round(raw_sc - lambda_mdl * (period * math.log(M)) / max(1, n), 4)
+        else:
+            sc = raw_sc
+        p_runes, p_latin = _format_decrypted_with_separators(dec_list, target_text)
+        payload: Dict[str, Any] = {
+            "method": method,
+            "cipher_name": method,
+            "tier": tier,
+            "key_shifts": list(key_shifts),
+            "key_runes": key_runes,
+            "key_latin": key_latin,
+            "period": period,
+            "raw_score": raw_sc,
+            "score": sc,
+            "plaintext_runes": p_runes,
+            "plaintext_latin": p_latin,
+        }
+        if extra:
+            payload.update(extra)
+        _register_candidate(payload)
+
+    # Step 3: Test Canonical Solved Liber Primus Methods (Reference Ground Truth)
+    if _check_cancelled(3, "Canonical Solved Methods"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": [], "winner": None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(3, 10, "Canonical Solved Methods (Reference Ground Truth)", PhaseStatus.STARTED)
+
+    canonical_solved_keys: Set[Tuple[int, ...]] = set()
     if n >= 2:
         # 1. Direct Gematria Primus transliteration (Identity cipher)
-        dec_direct = list(indices)
-        score_direct = score_composite_runes(dec_direct)
-        candidates.append({
-            "method": "CANONICAL_DIRECT_TRANSLITERATION",
-            "key_shifts": [0],
-            "key_runes": "ᚠ",
-            "key_latin": "IDENTITY",
-            "period": 1,
-            "score": score_direct,
-            "plaintext_runes": indices_to_runes(dec_direct),
-            "plaintext_latin": decode_runes(indices_to_runes(dec_direct)),
-        })
+        _register_dec_candidate(
+            method="CANONICAL_DIRECT_TRANSLITERATION",
+            dec_indices=list(indices),
+            key_shifts=[0],
+            key_runes="ᚠ",
+            key_latin="IDENTITY",
+            period=1,
+            tier=1,
+        )
 
         # 2. Atbash in F_29: (28 - c) mod 29 (Page 00 "A warning")
-        dec_atbash = [(28 - c) % M for c in indices]
-        score_atbash = score_composite_runes(dec_atbash)
-        candidates.append({
-            "method": "CANONICAL_ATBASH_F29",
-            "key_shifts": [],
-            "key_runes": "",
-            "key_latin": "ATBASH",
-            "period": 1,
-            "score": score_atbash,
-            "plaintext_runes": indices_to_runes(dec_atbash),
-            "plaintext_latin": decode_runes(indices_to_runes(dec_atbash)),
-        })
+        _register_dec_candidate(
+            method="CANONICAL_ATBASH_F29",
+            dec_indices=[(28 - c) % M for c in indices],
+            key_shifts=[],
+            key_runes="",
+            key_latin="ATBASH",
+            period=1,
+            tier=1,
+        )
 
         # 3. Atbash + Caesar (+3) in F_29: ((28 - c) + 3) mod 29 (Koan 1)
-        dec_atbash3 = [((28 - c) + 3) % M for c in indices]
-        score_atbash3 = score_composite_runes(dec_atbash3)
-        candidates.append({
-            "method": "CANONICAL_ATBASH_SHIFT_3",
-            "key_shifts": [3],
-            "key_runes": "",
-            "key_latin": "ATBASH+3",
-            "period": 1,
-            "score": score_atbash3,
-            "plaintext_runes": indices_to_runes(dec_atbash3),
-            "plaintext_latin": decode_runes(indices_to_runes(dec_atbash3)),
-        })
+        _register_dec_candidate(
+            method="CANONICAL_ATBASH_SHIFT_3",
+            dec_indices=[((28 - c) + 3) % M for c in indices],
+            key_shifts=[3],
+            key_runes="",
+            key_latin="ATBASH+3",
+            period=1,
+            tier=1,
+        )
 
         # 4. Vigenère DIVINITY with Fehu-skip (Welcome)
         try:
             dec_div_runes = rune_vigenere_decode_f_skip(target_text, key="DIVINITY", skip_indices=WELCOME_F_SKIP_POSITIONS, preserve_separators=False)
             dec_div_idx = clean_runes_to_indices(dec_div_runes)
             if len(dec_div_idx) == n:
-                score_div = score_composite_runes(dec_div_idx)
-                candidates.append({
-                    "method": "CANONICAL_VIGENERE_DIVINITY_FSKIP",
-                    "key_shifts": canonical_key_shifts("DIVINITY"),
-                    "key_runes": latin_to_rune("DIVINITY"),
-                    "key_latin": "DIVINITY (F-skip)",
-                    "period": 8,
-                    "score": score_div,
-                    "plaintext_runes": dec_div_runes,
-                    "plaintext_latin": decode_runes(dec_div_runes),
-                })
-        except Exception:
+                div_shifts = canonical_key_shifts("DIVINITY")
+                _register_dec_candidate(
+                    method="CANONICAL_VIGENERE_DIVINITY_FSKIP",
+                    dec_indices=dec_div_idx,
+                    key_shifts=div_shifts,
+                    key_runes=latin_to_rune("DIVINITY"),
+                    key_latin="DIVINITY (F-skip)",
+                    period=8,
+                    tier=1,
+                    extra={"is_f_skip": True, "skip_indices": sorted(WELCOME_F_SKIP_POSITIONS)},
+                )
+                if candidates[-1]["score"] >= -2.50:
+                    canonical_solved_keys.add(tuple(div_shifts))
+        except (ValueError, KeyError, IndexError):
             pass
 
         # 5. Vigenère FIRFUMFERENFE with Fehu-skip (Koan 2)
@@ -1820,18 +2626,20 @@ def crack_liber_primus(
             dec_firf_runes = rune_vigenere_decode_f_skip(target_text, key="FIRFUMFERENFE", skip_indices=KOAN2_F_SKIP_POSITIONS, preserve_separators=False)
             dec_firf_idx = clean_runes_to_indices(dec_firf_runes)
             if len(dec_firf_idx) == n:
-                score_firf = score_composite_runes(dec_firf_idx)
-                candidates.append({
-                    "method": "CANONICAL_VIGENERE_FIRFUMFERENFE_FSKIP",
-                    "key_shifts": canonical_key_shifts("FIRFUMFERENFE"),
-                    "key_runes": latin_to_rune("FIRFUMFERENFE"),
-                    "key_latin": "FIRFUMFERENFE (F-skip)",
-                    "period": 13,
-                    "score": score_firf,
-                    "plaintext_runes": dec_firf_runes,
-                    "plaintext_latin": decode_runes(dec_firf_runes),
-                })
-        except Exception:
+                firf_shifts = canonical_key_shifts("FIRFUMFERENFE")
+                _register_dec_candidate(
+                    method="CANONICAL_VIGENERE_FIRFUMFERENFE_FSKIP",
+                    dec_indices=dec_firf_idx,
+                    key_shifts=firf_shifts,
+                    key_runes=latin_to_rune("FIRFUMFERENFE"),
+                    key_latin="FIRFUMFERENFE (F-skip)",
+                    period=13,
+                    tier=1,
+                    extra={"is_f_skip": True, "skip_indices": sorted(KOAN2_F_SKIP_POSITIONS)},
+                )
+                if candidates[-1]["score"] >= -2.50:
+                    canonical_solved_keys.add(tuple(firf_shifts))
+        except (ValueError, KeyError, IndexError):
             pass
 
         # 6. Prime Totient Stream Cipher with Fehu-skip (Page 56 / 73 "An end")
@@ -1839,33 +2647,53 @@ def crack_liber_primus(
             dec_tot_runes = prime_totient_stream_decode(target_text, offset=0, preserve_separators=False, skip_indices={56})
             dec_tot_idx = clean_runes_to_indices(dec_tot_runes)
             if len(dec_tot_idx) == n:
-                score_tot = score_composite_runes(dec_tot_idx)
-                candidates.append({
-                    "method": "CANONICAL_PRIME_TOTIENT_STREAM_FSKIP",
-                    "key_shifts": [],
-                    "key_runes": "",
-                    "key_latin": "phi(primes[i]) = primes[i] - 1 (F-skip @ 56)",
-                    "period": 0,
-                    "score": score_tot,
-                    "plaintext_runes": dec_tot_runes,
-                    "plaintext_latin": decode_runes(dec_tot_runes),
-                })
-        except Exception:
+                _register_dec_candidate(
+                    method="CANONICAL_PRIME_TOTIENT_STREAM_FSKIP",
+                    dec_indices=dec_tot_idx,
+                    key_shifts=[],
+                    key_runes="",
+                    key_latin="phi(primes[i]) = primes[i] - 1 (F-skip @ 56)",
+                    period=0,
+                    tier=1,
+                    extra={"is_f_skip": True, "skip_indices": [56]},
+                )
+        except (ValueError, KeyError, IndexError):
             pass
 
-    # Step 3: Periodic Solvers on candidate periods (top 8 in standard, top 12 in deep mode)
+    if emitter:
+        emitter.emit_phase(3, 10, "Canonical Solved Methods", PhaseStatus.COMPLETED)
+
+    # Step 4: Periodic Solvers on candidate periods (Unicity cap + Sinkov pre-gate applied ONLY here)
+    if _check_cancelled(4, "Periodic Solvers & Coupled Hill Climbing"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(4, 10, "Periodic Solvers & Coupled Hill Climbing", PhaseStatus.STARTED)
     num_periods = 12 if deep else 8
     tested_periods = [p[0] for p in periods[:num_periods]] if periods else [1]
     if 1 not in tested_periods:
         tested_periods.append(1)
-    for p in tested_periods:
+
+    m_unicity_cap = max_unconstrained_periodic_key_length(n)
+    t_tables_by_period: Dict[int, Any] = {}
+    for idx_p, p in enumerate(tested_periods):
+        if _check_cancelled(4, "Periodic Solvers & Coupled Hill Climbing"):
+            break
+        if emitter:
+            emitter.emit_phase(4, 10, "Periodic Solvers & Coupled Hill Climbing", PhaseStatus.PROGRESS, completed=idx_p+1, total=len(tested_periods), message=f"Period m={p}")
+
+        if p > m_unicity_cap:
+            continue
+        sinkov_ok, _, _ = passes_sinkov_columnar_ioc_gate(indices, p)
+        if not sinkov_ok:
+            continue
+
         t_table = compute_t_table(indices, p)
+        t_tables_by_period[p] = t_table
         sep_key = solve_separable_key(t_table)
         mic_key, _ = align_columns_mic(indices, p)
         exact_key, _ = solve_periodic_bigram_exact(indices, p)
-
-        # Hill climbing refined from exact/separable key
-        hc_key, hc_score = hill_climbing_coupled(indices, p, start_key=exact_key, restarts=2)
+        hc_key, _ = hill_climbing_coupled(indices, p, start_key=exact_key, restarts=2)
 
         for k_type, k_shifts in [
             ("EXACT_BIGRAM", exact_key),
@@ -1874,27 +2702,39 @@ def crack_liber_primus(
             ("HILL_CLIMBING", hc_key),
         ]:
             dec = [(indices[i] - k_shifts[i % p]) % M for i in range(n)]
-            score = score_composite_runes(dec)
-            candidates.append({
-                "method": f"VIGENERE_PERIOD_{p}_{k_type}",
-                "key_shifts": k_shifts,
-                "key_runes": indices_to_runes(k_shifts),
-                "key_latin": decode_runes(indices_to_runes(k_shifts)),
-                "period": p,
-                "score": score,
-                "plaintext_runes": indices_to_runes(dec),
-                "plaintext_latin": decode_runes(indices_to_runes(dec)),
-            })
+            _register_dec_candidate(
+                method=f"VIGENERE_PERIOD_{p}_{k_type}",
+                dec_indices=dec,
+                key_shifts=k_shifts,
+                key_runes=indices_to_runes(k_shifts),
+                key_latin=decode_runes(indices_to_runes(k_shifts)),
+                period=p,
+                tier=2,
+            )
 
-        # Step 4: Fast Dictionary matching via T-table for this period
-        master_variants = _get_master_key_variants(include_rotations=(include_rotations or deep))
+    if emitter:
+        emitter.emit_phase(4, 10, "Periodic Solvers & Coupled Hill Climbing", PhaseStatus.COMPLETED)
+
+    # Step 5: Fast Dictionary matching via T-table for this period (unrestricted by Sinkov/Unicity)
+    if _check_cancelled(5, "Fast T-Table Dictionary Matching"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(5, 10, "Fast T-Table Dictionary Matching", PhaseStatus.STARTED)
+    master_variants = _get_master_key_variants(include_rotations=(include_rotations or deep))
+    for idx_p, p in enumerate(tested_periods):
+        if _check_cancelled(5, "Fast T-Table Dictionary Matching"):
+            break
+        t_table = t_tables_by_period.get(p)
+        if t_table is None:
+            t_table = compute_t_table(indices, p)
+            t_tables_by_period[p] = t_table
         dict_scored = score_dictionary_keys_t_table(t_table, master_variants)
         for cand, _ in dict_scored[:5]:
             d_key = cand["shifts"] if isinstance(cand, dict) else cand
             k_len = len(d_key)
             tiled_key = [d_key[i % k_len] for i in range(p)]
             dec = [(indices[i] - tiled_key[i % p]) % M for i in range(n)]
-            score = score_composite_runes(dec)
             if isinstance(cand, dict):
                 label = cand.get("label", "FORWARD")
                 word_latin = cand.get("word", "")
@@ -1903,30 +2743,109 @@ def crack_liber_primus(
             else:
                 method_name = f"DICTIONARY_WORD_PERIOD_{p}"
                 key_display = decode_runes(indices_to_runes(tiled_key))
-            candidates.append({
-                "method": method_name,
-                "key_shifts": tiled_key,
-                "key_runes": indices_to_runes(tiled_key),
-                "key_latin": key_display,
-                "period": p,
-                "score": score,
-                "plaintext_runes": indices_to_runes(dec),
-                "plaintext_latin": decode_runes(indices_to_runes(dec)),
-            })
+            _register_dec_candidate(
+                method=method_name,
+                dec_indices=dec,
+                key_shifts=tiled_key,
+                key_runes=indices_to_runes(tiled_key),
+                key_latin=key_display,
+                period=p,
+                tier=1,
+            )
             if record_attempt and isinstance(cand, dict) and cand.get("word"):
                 try:
                     record_attempt(
                         page=page_key,
                         word=cand["word"],
                         method=method_name,
-                        score=score,
+                        score=candidates[-1]["score"],
                         result_preview=key_display,
                     )
-                except Exception:
+                except (OSError, RuntimeError, ValueError):
                     pass
 
-        # Step 4b: Beaufort Dictionary Matching via Beaufort T-table (Plaintext = (Key - Ciphertext) mod 29)
-        if compute_beaufort_t_table is not None:
+    # Lightweight F-skip periodic & dictionary search when ciphertext contains Fehu ('ᚠ' == 0)
+    if 0 in indices and n >= 16:
+        variant_by_shifts: Dict[Tuple[int, ...], Tuple[str, str]] = {}
+        for mv in master_variants:
+            if isinstance(mv, dict):
+                sh = tuple(int(x) % M for x in mv.get("shifts", []))
+                if 5 <= len(sh) <= 15 and sh not in variant_by_shifts:
+                    variant_by_shifts[sh] = (str(mv.get("word", "")), str(mv.get("label", "FORWARD")))
+            elif isinstance(mv, (list, tuple)) and 5 <= len(mv) <= 15:
+                sh = tuple(int(x) % M for x in mv)
+                if sh not in variant_by_shifts:
+                    variant_by_shifts[sh] = (decode_runes(indices_to_runes(list(sh))), "FORWARD")
+
+        seen_fskip_keys: Set[Tuple[int, ...]] = set(canonical_solved_keys)
+        # 5b-1: Unconstrained F-skip periodic search (periods 6..min(13, m_unicity_cap)) + dictionary promotion
+        max_fs_p = min(13, max(1, m_unicity_cap))
+        for p in range(6, max_fs_p + 1):
+            if n < max(24, 3 * p):
+                continue
+            fs_key, fs_dec, fs_skips, _ = solve_f_skip_periodic_exact(indices, p)
+            k_tup = tuple(fs_key)
+            if k_tup in seen_fskip_keys:
+                continue
+            seen_fskip_keys.add(k_tup)
+            if k_tup in variant_by_shifts:
+                word_latin, label = variant_by_shifts[k_tup]
+                _register_dec_candidate(
+                    method=f"DICTIONARY_{label}_FSKIP_PERIOD_{p}",
+                    dec_indices=fs_dec,
+                    key_shifts=fs_key,
+                    key_runes=indices_to_runes(fs_key),
+                    key_latin=f"{word_latin} (F-skip)",
+                    period=p,
+                    tier=1,
+                    extra={"is_f_skip": True, "skip_indices": sorted(fs_skips)},
+                )
+            else:
+                _register_dec_candidate(
+                    method=f"VIGENERE_FSKIP_PERIOD_{p}_EXACT_BIGRAM",
+                    dec_indices=fs_dec,
+                    key_shifts=fs_key,
+                    key_runes=indices_to_runes(fs_key),
+                    key_latin=f"{decode_runes(indices_to_runes(fs_key))} (F-skip)",
+                    period=p,
+                    tier=2,
+                    extra={"is_f_skip": True, "skip_indices": sorted(fs_skips)},
+                )
+
+        # 5b-2: Lightweight sacred dictionary F-skip check via Viterbi decoder
+        sacred_pool = list(SACRED_CANONICAL_WORDS[:120]) if SACRED_CANONICAL_WORDS else list(CANONICAL_CRIBS)
+        for sw in sacred_pool:
+            sw_shifts = canonical_key_shifts(sw)
+            p_sw = len(sw_shifts)
+            if not (5 <= p_sw <= 15) or tuple(sw_shifts) in seen_fskip_keys:
+                continue
+            seen_fskip_keys.add(tuple(sw_shifts))
+            dec_sw, skips_sw, _ = viterbi_f_skip_decode(indices, sw_shifts)
+            if score_composite_runes(dec_sw) >= -3.35:
+                _register_dec_candidate(
+                    method=f"DICTIONARY_FORWARD_FSKIP_PERIOD_{p_sw}",
+                    dec_indices=dec_sw,
+                    key_shifts=sw_shifts,
+                    key_runes=indices_to_runes(sw_shifts),
+                    key_latin=f"{sw} (F-skip)",
+                    period=p_sw,
+                    tier=1,
+                    extra={"is_f_skip": True, "skip_indices": sorted(skips_sw)},
+                )
+
+    if emitter:
+        emitter.emit_phase(5, 10, "Fast T-Table Dictionary Matching", PhaseStatus.COMPLETED)
+
+    # Step 6: Beaufort Dictionary Matching via Beaufort T-table
+    if _check_cancelled(6, "Beaufort T-Table Dictionary Matching"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(6, 10, "Beaufort T-Table Dictionary Matching", PhaseStatus.STARTED)
+    if compute_beaufort_t_table is not None:
+        for idx_p, p in enumerate(tested_periods):
+            if _check_cancelled(6, "Beaufort T-Table Dictionary Matching"):
+                break
             b_table = compute_beaufort_t_table(indices, p, RUNIC_UNIGRAM_LOGP)
             b_scored = score_dictionary_keys_t_table(b_table, master_variants)
             for cand, _ in b_scored[:3]:
@@ -1934,7 +2853,6 @@ def crack_liber_primus(
                 k_len = len(d_key)
                 tiled_key = [d_key[i % k_len] for i in range(p)]
                 dec = [(tiled_key[i % p] - indices[i]) % M for i in range(n)]
-                score = score_composite_runes(dec)
                 if isinstance(cand, dict):
                     label = cand.get("label", "FORWARD")
                     word_latin = cand.get("word", "")
@@ -1943,85 +2861,113 @@ def crack_liber_primus(
                 else:
                     method_name = f"BEAUFORT_WORD_PERIOD_{p}"
                     key_display = decode_runes(indices_to_runes(tiled_key))
-                candidates.append({
-                    "method": method_name,
-                    "key_shifts": tiled_key,
-                    "key_runes": indices_to_runes(tiled_key),
-                    "key_latin": key_display,
-                    "period": p,
-                    "score": score,
-                    "plaintext_runes": indices_to_runes(dec),
-                    "plaintext_latin": decode_runes(indices_to_runes(dec)),
-                })
+                _register_dec_candidate(
+                    method=method_name,
+                    dec_indices=dec,
+                    key_shifts=tiled_key,
+                    key_runes=indices_to_runes(tiled_key),
+                    key_latin=key_display,
+                    period=p,
+                    tier=1,
+                )
                 if record_attempt and isinstance(cand, dict) and cand.get("word"):
                     try:
                         record_attempt(
                             page=page_key,
                             word=cand["word"],
                             method=method_name,
-                            score=score,
+                            score=candidates[-1]["score"],
                             result_preview=key_display,
                         )
-                    except Exception:
+                    except (OSError, RuntimeError, ValueError):
                         pass
+    if emitter:
+        emitter.emit_phase(6, 10, "Beaufort T-Table Dictionary Matching", PhaseStatus.COMPLETED)
 
-        # Step 4c: Apple Silicon Metal GPU Compound Key Sweeps (w1 + w2)
-        if (compound or deep) and use_metal and metal_sweep_2words is not None and is_metal_available():
-            try:
-                dict_words = (
-                    get_master_dictionary()
-                    if get_master_dictionary
-                    else (SACRED_CANONICAL_WORDS or [])
-                )
-                sweep_words = []
-                for w in dict_words[:250]:
-                    r_shifts = [INDEX_BY_RUNE[c] for c in latin_to_rune(w) if c in INDEX_BY_RUNE]
-                    if r_shifts:
-                        sweep_words.append((w, r_shifts))
+    # Step 7: Apple Silicon Metal GPU Compound Key Sweeps (w1 + w2)
+    if _check_cancelled(7, "Apple Silicon Metal GPU Compound Key Sweeps"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(7, 10, "Apple Silicon Metal GPU Compound Key Sweeps", PhaseStatus.STARTED)
+    metal_ran = False
+    if (compound or deep) and use_metal and metal_sweep_2words is not None and is_metal_available():
+        try:
+            dict_words = (
+                get_master_dictionary()
+                if get_master_dictionary
+                else (SACRED_CANONICAL_WORDS or [])
+            )
+            sweep_words = []
+            for w in dict_words[:250]:
+                r_shifts = [INDEX_BY_RUNE[c] for c in latin_to_rune(w) if c in INDEX_BY_RUNE]
+                if r_shifts:
+                    sweep_words.append((w, r_shifts))
+            for p in tested_periods:
+                t_table = t_tables_by_period.get(p) or compute_t_table(indices, p)
                 comp_hits = metal_sweep_2words(
                     t_table, sweep_words, p, threshold=-2.35, max_hits=20
                 )
-                for w1, w2, comp_sc in comp_hits[:3]:
+                for w1, w2, _ in comp_hits[:3]:
                     s1 = [INDEX_BY_RUNE[c] for c in latin_to_rune(w1) if c in INDEX_BY_RUNE]
                     s2 = [INDEX_BY_RUNE[c] for c in latin_to_rune(w2) if c in INDEX_BY_RUNE]
                     comb_shifts = s1 + s2
                     c_len = len(comb_shifts)
                     tiled_key = [comb_shifts[i % c_len] for i in range(p)]
                     dec = [(indices[i] - tiled_key[i % p]) % M for i in range(n)]
-                    score = score_composite_runes(dec)
                     comp_display = f"{w1}_{w2}_COMPOUND"
                     method_name = f"METAL_COMPOUND_2WORD_PERIOD_{p}"
-                    candidates.append({
-                        "method": method_name,
-                        "key_shifts": tiled_key,
-                        "key_runes": indices_to_runes(tiled_key),
-                        "key_latin": comp_display,
-                        "period": p,
-                        "score": score,
-                        "plaintext_runes": indices_to_runes(dec),
-                        "plaintext_latin": decode_runes(indices_to_runes(dec)),
-                        "accelerator": "METAL_GPU",
-                    })
+                    _register_dec_candidate(
+                        method=method_name,
+                        dec_indices=dec,
+                        key_shifts=tiled_key,
+                        key_runes=indices_to_runes(tiled_key),
+                        key_latin=comp_display,
+                        period=p,
+                        tier=1,
+                        extra={"accelerator": "METAL_GPU"},
+                    )
                     if record_attempt:
                         try:
                             record_attempt(
                                 page=page_key,
                                 word=f"{w1}_{w2}",
                                 method=method_name,
-                                score=score,
+                                score=candidates[-1]["score"],
                                 result_preview=comp_display,
                             )
-                        except Exception:
+                        except (OSError, RuntimeError, ValueError):
                             pass
-            except Exception:
-                pass
+            metal_ran = True
+        except (RuntimeError, ValueError, TypeError, OSError):
+            pass
 
-    # Step 5: Deterministic stream sweeps
+    if emitter:
+        if metal_ran:
+            emitter.emit_phase(7, 10, "Apple Silicon Metal GPU Compound Key Sweeps", PhaseStatus.COMPLETED)
+        else:
+            emitter.emit_phase(7, 10, "Apple Silicon Metal GPU Compound Key Sweeps", PhaseStatus.SKIPPED, message="Metal GPU accelerator unavailable or deep/compound not enabled")
+
+    # Step 8: Deterministic stream sweeps
+    if _check_cancelled(8, "Deterministic Stream Sweeps"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(8, 10, "Deterministic Stream Sweeps (Totients, Primes, Fibonacci)", PhaseStatus.STARTED)
     stream_hits = sweep_deterministic_streams(indices, max_offset=200)
     for hit in stream_hits[:5]:
-        candidates.append(hit)
+        hit.setdefault("tier", 1)
+        hit.setdefault("raw_score", hit.get("score", 0.0))
+        _register_candidate(hit)
+    if emitter:
+        emitter.emit_phase(8, 10, "Deterministic Stream Sweeps", PhaseStatus.COMPLETED)
 
-    # Step 6: Crib dragging
+    # Step 9: Crib dragging
+    if _check_cancelled(9, "Known-Plaintext Crib Dragging"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": candidates[:top_k], "winner": candidates[0] if candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(9, 10, "Known-Plaintext Crib Dragging & Berlekamp-Massey", PhaseStatus.STARTED)
     raw_crib_hits = []
     limit = crib_limit or (60 if deep else 30)
     if get_rotated_vocabulary is not None:
@@ -2039,7 +2985,6 @@ def crack_liber_primus(
             else CANONICAL_CRIBS[:8]
         )
 
-    # Rank and diversify crib hits by cryptanalytic significance
     def _rank_crib_hit(h: dict) -> float:
         s = 0.0
         if h.get("bank_match"):
@@ -2055,7 +3000,12 @@ def crack_liber_primus(
         return s
 
     attempts_to_record = []
-    for crib in crib_source:
+    total_cribs = len(crib_source)
+    for c_idx, crib in enumerate(crib_source):
+        if _check_cancelled(9, "Known-Plaintext Crib Dragging"):
+            break
+        if emitter:
+            emitter.emit_phase(9, 10, "Known-Plaintext Crib Dragging & Berlekamp-Massey", PhaseStatus.PROGRESS, completed=c_idx+1, total=total_cribs, message=f"Dragging crib: {crib}")
         hits = drag_crib(indices, crib)
         if hits:
             raw_crib_hits.extend(hits)
@@ -2077,37 +3027,42 @@ def crack_liber_primus(
             "result_preview": preview,
         })
 
-    # Batch record all tested crib attempts in the ChromaDB vector database
     if record_attempts_batch and attempts_to_record:
         try:
             record_attempts_batch(attempts_to_record)
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             pass
 
     raw_crib_hits.sort(key=_rank_crib_hit, reverse=True)
     crib_hits = []
     for h in raw_crib_hits:
         c_w = h.get("crib", "")
-        # Allow at most 2 hits per crib word to maintain diversity across candidate cribs
         c_count = sum(1 for x in crib_hits if x.get("crib") == c_w)
         if c_count < 2:
             crib_hits.append(h)
         if len(crib_hits) >= 10:
             break
 
-    # Step 7: Deep mode sweeps if requested
+    if emitter:
+        emitter.emit_phase(9, 10, "Known-Plaintext Crib Dragging & Berlekamp-Massey", PhaseStatus.COMPLETED)
+
+    # Step 9b: Deep mode sweeps if requested
     if deep:
         affine_hits = sweep_affine_mod29(indices)
         for hit in affine_hits[:5]:
-            candidates.append(hit)
+            hit.setdefault("tier", 1)
+            hit.setdefault("raw_score", hit.get("score", 0.0))
+            _register_candidate(hit)
 
         for solved_pt in SOLVED_LP_PLAINTEXTS[:3]:
             s_runes = latin_to_rune(solved_pt)
             rk_hits = cross_page_running_key_scan(indices, s_runes, source_name="SOLVED_PAGE_TEXT")
             for hit in rk_hits[:3]:
-                candidates.append(hit)
+                hit.setdefault("tier", 1)
+                hit.setdefault("raw_score", hit.get("score", 0.0))
+                _register_candidate(hit)
 
-    # Step 7b: Neural Semantic Reranking on Apple Neural Engine (ANE)
+    # Step 9c: Neural Semantic Reranking on Apple Neural Engine (ANE)
     if use_ane and is_ane_available() and score_candidate_naturalness_neural is not None and candidates:
         try:
             pt_list = [c.get("plaintext_latin", "") for c in candidates]
@@ -2116,36 +3071,235 @@ def crack_liber_primus(
                 c["neural_score"] = ns
                 c["blended_score"] = round(c["score"] + 0.35 * ns, 4)
             candidates.sort(key=lambda x: -x.get("blended_score", x["score"]))
-        except Exception:
+        except (RuntimeError, ValueError, TypeError):
             candidates.sort(key=lambda x: -x["score"])
     else:
         candidates.sort(key=lambda x: -x["score"])
 
-    top_candidates = candidates[:top_k]
+    # Reserve at least 2 slots for tier == 1 candidates in top_k (e.g. top_k=5) when available
+    if top_k <= 0:
+        top_candidates = []
+    else:
+        t1_cands = [c for c in candidates if c.get("tier") == 1]
+        reserve_slots = min(2, max(1, top_k - 1), len(t1_cands)) if top_k >= 2 else min(1, len(t1_cands))
+        reserved_t1 = t1_cands[:reserve_slots]
+        reserved_ids = {id(c) for c in reserved_t1}
+        remaining = [c for c in candidates if id(c) not in reserved_ids]
+        top_candidates = reserved_t1 + remaining[:max(0, top_k - len(reserved_t1))]
+        top_candidates.sort(key=lambda x: -x.get("blended_score", x["score"]))
 
-    # Step 8: Validation & Significance
-    best_candidate = top_candidates[0] if top_candidates else None
-    sig_info = None
-    if best_candidate:
+    # Step 10: Uniform Validation & Significance across ALL top_candidates[:top_k]
+    if _check_cancelled(10, "Surrogate Shuffle Significance Validation"):
+        return {"page_id": page_key, "rune_count": n, "cancelled": True, "top_candidates": top_candidates, "winner": top_candidates[0] if top_candidates else None, "calc_steps": calc_steps}
+
+    if emitter:
+        emitter.emit_phase(10, 10, "Surrogate Shuffle Significance Validation", PhaseStatus.STARTED)
+
+    opt_null_cache: Dict[Tuple[int, int, str], Tuple[float, float]] = {}
+    score_floor = -2.85 if n < 100 else -2.75
+
+    # Lazy resolve al_kindi lexical and doublet gates (zero circular top-level import)
+    try:
+        from ciphers.al_kindi import (
+            analyze_runic_lexical_coverage as _lexical_fn,
+            doublet_rate_plausibility as _doublet_fn,
+        )
+    except ImportError:
+        from al_kindi import (
+            analyze_runic_lexical_coverage as _lexical_fn,
+            doublet_rate_plausibility as _doublet_fn,
+        )
+
+    for rank_idx, cand in enumerate(top_candidates):
+        cand_tier = int(cand.get("tier", 1))
+        cand_period = int(cand.get("period", 0) or 0)
+        cand_method = str(cand.get("method", ""))
+        cand_raw_score = float(cand.get("raw_score", cand.get("score", 0.0)))
+        cand_score = float(cand.get("score", 0.0))
+
+        # Determine solver kind for tier == 2 optimizer-matched null and holdout
+        solver_kind = "EXACT_BIGRAM"
+        for sk in ("FSKIP_EXACT_BIGRAM", "EXACT_BIGRAM", "SEPARABLE_UNIGRAM", "MIC_GAUGE", "HILL_CLIMBING"):
+            if sk in cand_method or (sk == "FSKIP_EXACT_BIGRAM" and "FSKIP" in cand_method):
+                solver_kind = sk
+                break
+
+        n_eff_cand = (M ** cand_period) if (cand_tier == 2 and cand_period >= 1) else max(1, len(candidates))
         sig_res = surrogate_shuffle_test(
             indices,
-            best_candidate["score"],
+            cand_raw_score,
             n_shuffles=50,
             sequential=True,
-            family=best_candidate.get("method"),
+            family=cand_method,
+            n_eff=n_eff_cand,
+            seed=3301,
         )
-        sig_info = {
-            "null_mean": sig_res.mean_null,
-            "null_std": sig_res.std_null,
-            "z_score": sig_res.z_score,
-            "p_value": sig_res.p_value,
-            "p_adj": sig_res.p_adj,
-            "trials": sig_res.trials,
-            "is_statistically_significant": sig_res.is_significant,
-        }
-        best_candidate["significance"] = sig_info
 
-    # Step 9: Automatic SQLite Ledger Logging
+        eff_null_mean = sig_res.mean_null
+        eff_null_std = sig_res.std_null
+        effective_z = sig_res.z_score
+        p_val_eff = sig_res.p_value
+        p_adj_eff = sig_res.p_adj
+        e_val_eff = sig_res.e_value
+        e_val_adj_eff = sig_res.e_value_adj
+        z_crit_eff = sig_res.z_crit
+
+        if cand_tier == 2 and cand_period >= 1:
+            opt_mu, opt_std = _estimate_optimizer_matched_null(
+                indices, cand_period, solver_kind, opt_null_cache, n_surrogates=20, seed=3301
+            )
+            z_opt = round((cand_raw_score - opt_mu) / opt_std, 2) if opt_std > 1e-6 else 0.0
+            eff_null_mean = opt_mu
+            eff_null_std = opt_std
+            effective_z = z_opt
+            p_opt = 0.5 * math.erfc(z_opt / math.sqrt(2.0))
+            if p_opt <= 0.0 and z_opt > 0.0:
+                p_opt = 1e-300
+            p_val_eff = max(1e-300, min(1.0, p_opt))
+            p_adj_eff = _sidak_or_bonferroni_padj(p_val_eff, n_eff_cand, bonferroni=True)
+            e_val_eff, e_val_adj_eff = _calibrated_e_value(p_val_eff, n_eff_cand)
+            z_crit_eff = round(compute_z_crit(n_eff_cand), 4)
+
+        # Piecewise multi-segment key consistency
+        piecewise_res = evaluate_piecewise_key_consistency(
+            cand, target_text, indices, sig_res.mean_null, sig_res.std_null
+        )
+        segment_consistency_ok = bool(piecewise_res["segment_consistency_ok"])
+
+        # Split-half holdout (tier == 2 periodic when n >= 4*p and n >= 100)
+        if cand_tier == 2 and cand_period >= 2:
+            holdout_res = validate_periodic_holdout(
+                indices,
+                cand_period,
+                solver_kind=solver_kind,
+                null_mean=sig_res.mean_null,
+                null_std=sig_res.std_null,
+            )
+        else:
+            holdout_res = {
+                "applicable": False,
+                "period": cand_period,
+                "solver_kind": solver_kind,
+                "holdout_score_1": None,
+                "holdout_score_2": None,
+                "mean_holdout_score": None,
+                "mean_holdout_z": None,
+                "holdout_ok": True,
+            }
+        holdout_ok = bool(holdout_res["holdout_ok"])
+
+        # LOCO column sensitivity (tier == 2 and period > 2)
+        cand_shifts = cand.get("key_shifts") or []
+        if cand_tier == 2 and cand_period > 2 and len(cand_shifts) == cand_period:
+            skip_set = set(cand["skip_indices"]) if cand.get("skip_indices") else None
+            loco_res = validate_column_key_sensitivity(indices, cand_shifts, skip_indices=skip_set)
+        else:
+            loco_res = {
+                "applicable": False,
+                "period": cand_period,
+                "column_deltas": [],
+                "threshold": 0.0,
+                "active_columns": cand_period,
+                "active_column_ratio": 1.0,
+                "column_cliff_ok": True,
+            }
+        column_cliff_ok = bool(loco_res["column_cliff_ok"])
+
+        # Lexical coverage & doublet plausibility gates
+        dec_indices_cand = _extract_cand_decrypted_indices(cand, indices)
+        lex_res = _lexical_fn(cand.get("plaintext_latin", ""), cand.get("plaintext_runes"))
+        word_coverage_ok = bool(lex_res["word_coverage_ok"])
+        doublet_rate_ok, doublet_rate_val = _doublet_fn(dec_indices_cand)
+
+        is_sig = bool(
+            effective_z >= z_crit_eff
+            and (p_adj_eff < 0.01 or e_val_adj_eff >= 100.0)
+            and cand_score >= score_floor
+            and word_coverage_ok
+            and doublet_rate_ok
+            and segment_consistency_ok
+            and holdout_ok
+            and column_cliff_ok
+        )
+
+        sig_info = {
+            "null_mean": eff_null_mean,
+            "null_std": eff_null_std,
+            "raw_null_mean": sig_res.mean_null,
+            "raw_null_std": sig_res.std_null,
+            "z_score": effective_z,
+            "z_raw": sig_res.z_score,
+            "z_crit": z_crit_eff,
+            "p_value": p_val_eff,
+            "p_adj": p_adj_eff,
+            "e_value": e_val_eff,
+            "e_value_adj": e_val_adj_eff,
+            "trials": sig_res.trials,
+            "is_statistically_significant": is_sig,
+            "is_significant": is_sig,
+            "word_coverage_ok": word_coverage_ok,
+            "doublet_rate_ok": doublet_rate_ok,
+            "doublet_rate": doublet_rate_val,
+            "segment_consistency_ok": segment_consistency_ok,
+            "holdout_ok": holdout_ok,
+            "column_cliff_ok": column_cliff_ok,
+        }
+        cand["significance"] = sig_info
+        cand["is_significant"] = is_sig
+        cand["z_score"] = effective_z
+        cand["z_crit"] = z_crit_eff
+        cand["p_value"] = p_val_eff
+        cand["p_adj"] = p_adj_eff
+        cand["e_value"] = e_val_eff
+        cand["e_value_adj"] = e_val_adj_eff
+        cand["piecewise"] = piecewise_res
+        cand["min_segment_score"] = piecewise_res["min_segment_score"]
+        cand["mean_segment_score"] = piecewise_res["mean_segment_score"]
+        cand["segment_score_std"] = piecewise_res["segment_score_std"]
+        cand["consistent_segment_ratio"] = piecewise_res["consistent_segment_ratio"]
+        cand["best_phase_shift"] = piecewise_res["best_phase_shift"]
+        cand["segment_consistency_ok"] = segment_consistency_ok
+        cand["holdout"] = holdout_res
+        cand["holdout_ok"] = holdout_ok
+        cand["mean_holdout_score"] = holdout_res["mean_holdout_score"]
+        cand["mean_holdout_z"] = holdout_res["mean_holdout_z"]
+        cand["column_sensitivity"] = loco_res
+        cand["column_cliff_ok"] = column_cliff_ok
+        cand["active_column_ratio"] = loco_res["active_column_ratio"]
+        cand["lexical_coverage"] = lex_res
+        cand["word_ratio"] = lex_res["word_ratio"]
+        cand["aligned_word_ratio"] = lex_res["aligned_word_ratio"]
+        cand["distinct_long_words"] = lex_res["distinct_long_words"]
+        cand["word_coverage_ok"] = word_coverage_ok
+        cand["doublet_rate"] = doublet_rate_val
+        cand["doublet_rate_ok"] = doublet_rate_ok
+
+        if rank_idx == 0:
+            _emit_calc(
+                stage="Phase 10: Surrogate Test",
+                module="taxonomy / sprt",
+                formula="Z = (Score - mu_null) / sigma_null; conjunctive rigor gates",
+                inputs={
+                    "Score": round(cand_score, 4),
+                    "null_mean": round(eff_null_mean, 4),
+                    "null_std": round(eff_null_std, 4),
+                    "z_crit": z_crit_eff,
+                },
+                result=f"Z-Score = {effective_z:+.2f}, p_adj = {p_adj_eff:.4g}, e_adj = {e_val_adj_eff:.2f}",
+                verdict="PASS" if is_sig else "REJECT",
+            )
+        if emitter:
+            emitter.emit_candidate_update(
+                candidate_id=cand.get("candidate_id", f"cand_{rank_idx + 1}"),
+                z_score=effective_z,
+                p_adj=p_adj_eff,
+                is_significant=is_sig,
+            )
+
+    best_candidate = top_candidates[0] if top_candidates else None
+    sig_info_best = best_candidate.get("significance") if best_candidate else None
+
+    # Automatic SQLite Ledger Logging
     if log_canonical_attempt and best_candidate:
         input_digest = f"runes_{n}_{compute_unigram_ic(indices):.4f}"
         params = {
@@ -2153,8 +3307,8 @@ def crack_liber_primus(
             "period": best_candidate.get("period", 0),
             "key": best_candidate.get("key_latin", ""),
             "score": best_candidate["score"],
-            "z_score": sig_info["z_score"] if sig_info else 0.0,
-            "p_adj": sig_info["p_adj"] if sig_info else 1.0,
+            "z_score": sig_info_best["z_score"] if sig_info_best else 0.0,
+            "p_adj": sig_info_best["p_adj"] if sig_info_best else 1.0,
         }
         try:
             log_canonical_attempt(
@@ -2163,18 +3317,21 @@ def crack_liber_primus(
                 parameters=params,
                 input_digest=input_digest,
                 score=best_candidate["score"],
-                passed=bool(sig_info and sig_info["is_statistically_significant"]),
+                passed=bool(sig_info_best and sig_info_best["is_statistically_significant"]),
                 result_preview=best_candidate["plaintext_latin"][:150],
             )
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             pass
 
     tested_words_count = 0
     if get_tested_words:
         try:
             tested_words_count = len(get_tested_words(page=page_key))
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             pass
+
+    if emitter:
+        emitter.emit_phase(10, 10, "Surrogate Shuffle Significance Validation", PhaseStatus.COMPLETED)
 
     return {
         "page_id": page_key,
@@ -2187,6 +3344,8 @@ def crack_liber_primus(
         "winner": best_candidate,
         "recorded_attempts_count": len(attempts_to_record) if 'attempts_to_record' in locals() else 0,
         "total_page_tested_words": tested_words_count,
+        "calc_steps": calc_steps,
+        "cancelled": False,
         "hardware": {
             "metal_gpu": get_metal_device_info() if is_metal_available() else {"available": False},
             "neural_engine": get_ane_device_info() if is_ane_available() else {"available": False},

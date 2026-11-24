@@ -15,12 +15,15 @@ Tests:
 
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+import agents.ledger as ledger
 from ciphers.agrippa import decode_runes, latin_to_rune
 from ciphers.kasiski import rune_vigenere_decode, rune_vigenere_encode
 import ciphers.taxonomy as taxonomy
@@ -29,6 +32,43 @@ import trithemius
 
 class TestCryptanalysisTaxonomy(unittest.TestCase):
     def setUp(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        db_path = os.path.join(tmp_dir.name, "ledger.sqlite3")
+        vector_dir = os.path.join(tmp_dir.name, "vectordb")
+        os.makedirs(vector_dir, exist_ok=True)
+
+        orig_db = ledger.DB_PATH
+        orig_vec = ledger.VECTOR_DIR
+        saved_defaults = []
+        for name in dir(ledger):
+            fn = getattr(ledger, name)
+            if callable(fn) and getattr(fn, "__defaults__", None):
+                defs = fn.__defaults__
+                if orig_db in defs or orig_vec in defs:
+                    saved_defaults.append((fn, defs))
+                    fn.__defaults__ = tuple(
+                        db_path if d == orig_db else (vector_dir if d == orig_vec else d)
+                        for d in defs
+                    )
+
+        ledger._VECTOR_CLIENT = None
+        ledger._VECTOR_COLLECTION = None
+        p_db = patch.object(ledger, "DB_PATH", db_path)
+        p_vec = patch.object(ledger, "VECTOR_DIR", vector_dir)
+        p_db.start()
+        p_vec.start()
+
+        def _cleanup_ledger():
+            ledger._VECTOR_CLIENT = None
+            ledger._VECTOR_COLLECTION = None
+            for fn, defs in saved_defaults:
+                fn.__defaults__ = defs
+
+        self.addCleanup(p_db.stop)
+        self.addCleanup(p_vec.stop)
+        self.addCleanup(_cleanup_ledger)
+
         self.workstation = trithemius.TerminalWorkstation()
         self.sample_pt_latin = (
             "WELCOME PILGRIMS TO THIS GREAT JOURNEY A WARNING BELIEVE NOTHING FROM THIS BOOK "
@@ -230,7 +270,10 @@ class TestCryptanalysisTaxonomy(unittest.TestCase):
         # Check that it logged to canonical_attempts table
         from agents.ledger import _connect
         conn = _connect()
-        cur = conn.execute("SELECT score, passed_gatekeeper, canonical_key FROM canonical_attempts WHERE page = 'unit_test_page'")
+        cur = conn.execute(
+            "SELECT score, passed_gatekeeper, canonical_key "
+            "FROM canonical_attempts WHERE page = 'unit_test_page' AND passed_gatekeeper = 1"
+        )
         row = cur.fetchone()
         conn.close()
         self.assertIsNotNone(row)

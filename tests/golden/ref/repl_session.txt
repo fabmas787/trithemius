@@ -6,19 +6,6 @@ Model: SparkLLM/Spark-X2.5-4B | Chunks: 143 | Corpus: 104 files | Boost: OFF
 ==============================================================================
 Tip: Type '/help' for full command manual or '/help <cmd>' for focused guide.
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> 
 +--- [GEMATRIA PRIMUS ARITHMETIC] -----------------------------------------
 | Input Text:      ᚹᛖᛚᚳᚩᛗᛖ
@@ -32,19 +19,6 @@ trithemius>
 |   ᚹᛖᛚᚳᚩᛗᛖ (WELCOME) -> Prime Sum: 317 (Prime: True)
 +--------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> 
 +--- [LIBER PRIMUS PAGE 56] ----------------------------------------
 | Document: page_56_loss_of_innocence.md
@@ -87,19 +61,6 @@ THE TOTIENT FUNCTION IS SACRED.
 |   [...] (run 'cat corpus/page_56_runes.md' for full document)
 +--------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> 
 ==============================================================================
 TRITHEMIUS WORKSTATION — COMPLETE COMMAND REFERENCE MANUAL
@@ -154,7 +115,7 @@ TRITHEMIUS WORKSTATION — COMPLETE COMMAND REFERENCE MANUAL
 --- 4. MODEL, ENGINE & HARDWARE CONFIGURATION --------------------------------
   /key [show|clear|<p> <k>]       AI API keys & cloud provider configuration
                                   section
-  /think [on|off]                 Toggle Chain-of-Thought (CoT) reasoning for
+  /think [on|off|toggle]          Toggle Chain-of-Thought (CoT) reasoning for
                                   reasoning models
   /boost [on|off|status]          Toggle Deep Cryptanalytic Retrieval &
                                   Reranking Boost mode
@@ -167,7 +128,7 @@ TRITHEMIUS WORKSTATION — COMPLETE COMMAND REFERENCE MANUAL
   /profile [mode]                 Toggle hardware profile between standard and
                                   low-spec footprint
   /cache clear                    Clear exact RAG response cache in
-                                  vectordb/.rag_cache.json
+                                  vectordb/cache.sqlite3
 
 --- 5. TELEMETRY, BENCHMARKING & SYSTEM --------------------------------------
   /status                         Display system telemetry, provider health,
@@ -183,19 +144,6 @@ TRITHEMIUS WORKSTATION — COMPLETE COMMAND REFERENCE MANUAL
 Tip: Type '/help <cmd>' (e.g. '/help gematria' or '/help boost') for details.
 ==============================================================================
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> 
 +--- [HELP: /vigenere] -------------------------------------------------------
 | Summary:     Modulo-29 (Futhorc) or Modulo-26 (Latin) Vigenère cipher solver
@@ -223,19 +171,6 @@ and English dictionary word ratio to determine plausibility.
 |   /vigenere enc "WELCOME PILGRIMS" CICADA
 +-----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> 
 +--- [TRITHEMIUS SYSTEM TELEMETRY] ---------------------------------------
 | Active Provider: OLLAMA (Host: http://localhost:11434)
@@ -250,19 +185,6 @@ trithemius>
 | Official PGP:    7A35090F (6D854CD7933322A601C...)
 +--------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
-COMMANDS REFERENCE: (Categorized by Type)
-  [CRYPTANALYSIS]  /crack       /solve       /gematria      /atbash
-                   /vigenere    /totient-stream             /triage
-                   /period      /crib        /opsec         /layout
-                   /lexicon     /running-key /running-key-scan
-  [KNOWLEDGE]      /ask         /web         /page          /organize  /ingest
-  [AI ENGINE]      /key (AI keys & config)   /provider      /model
-                   /think       /boost       /host          /profile   /cache
-  [SYSTEM]         /status      /bench       /hardware    /clear     /help
-                   /exit        (Hardware aliases: /gpu, /metal, /ane)
-  (Type any natural language query to ask the RAG assistant directly)
-------------------------------------------------------------------------------
 trithemius> [*] Workstation session terminated.
 
 --stderr--

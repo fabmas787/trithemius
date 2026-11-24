@@ -134,6 +134,25 @@ class TestStreamChat(unittest.TestCase):
         self.assertIn("Analyzing runes...", output)
         self.assertIn("Decoded answer.", output)
 
+    @patch("scripts.ask.ollama.chat")
+    def test_stream_chat_honors_dynamic_num_ctx(self, mock_chat):
+        import config
+        orig_ctx = config.DEFAULT_NUM_CTX
+        self.addCleanup(lambda: setattr(config, "DEFAULT_NUM_CTX", orig_ctx))
+        config.DEFAULT_NUM_CTX = 2048
+
+        mock_chat.return_value = iter([{"message": {"content": "OK"}}])
+        with patch("sys.stdout", io.StringIO()):
+            stream_chat("SparkLLM/Spark-X2.5-4B", "Prompt test", think=False)
+
+        mock_chat.assert_called_once_with(
+            model="SparkLLM/Spark-X2.5-4B",
+            messages=unittest.mock.ANY,
+            options={"num_ctx": 2048, "num_predict": config.DEFAULT_NUM_PREDICT},
+            stream=True,
+            think=False,
+        )
+
 
 class TestBodleianTuning(unittest.TestCase):
     def test_constants_tuned(self):
@@ -150,7 +169,8 @@ class TestBodleianTuning(unittest.TestCase):
 class TestBM25Retriever(unittest.TestCase):
     def test_bm25_retrieves_relevant_page(self):
         from scripts.ask import bm25_retrieve
-        res = bm25_retrieve("some wisdom primes sacred page 56", k=2)
+        with patch.dict(os.environ, {"TRITHEMIUS_BM25_PERSIST": "off"}):
+            res = bm25_retrieve("some wisdom primes sacred page 56", k=2)
         self.assertGreaterEqual(len(res), 1)
         top_chunk, meta = res[0]
         self.assertEqual(meta["page"], "56")
@@ -159,7 +179,8 @@ class TestBM25Retriever(unittest.TestCase):
     def test_retrieve_fallback_when_embedding_fails(self):
         from scripts.ask import retrieve
         # When collection is None or embeddings raise exception
-        res = retrieve(None, "welcome pilgrims", k=2)
+        with patch.dict(os.environ, {"TRITHEMIUS_BM25_PERSIST": "off"}):
+            res = retrieve(None, "welcome pilgrims", k=2)
         self.assertGreaterEqual(len(res), 1)
         top_chunk, meta = res[0]
         self.assertIn("page_00", meta["source"])
@@ -261,6 +282,92 @@ class TestRAGCacheAndBM25Phase1(unittest.TestCase):
             bodleian.clear_digest_memo()
             mismatch_load = ask.load_persisted_bm25(corpus_dir=corpus_dir, index_path=idx_file)
             self.assertIsNone(mismatch_load)
+
+    def test_lookup_rag_cache_missing_and_deleted_db(self):
+        import tempfile
+        import scripts.ask as ask
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_db = os.path.join(tmpdir, "nonexistent_cache.sqlite3")
+            key = ask.rag_cache_key("Missing DB query", "digest_1", "ollama", "spark", False)
+            self.assertIsNone(ask.lookup_rag_cache(key, db_path=missing_db))
+            self.assertFalse(os.path.exists(missing_db))
+
+            # Initialize via store, verify hit, then delete DB file + WAL/SHM and verify clean miss
+            ask.store_rag_cache(key, "Missing DB query", "digest_1", "ollama", "spark", False, "v1", "bm25", "Cached", [], db_path=missing_db)
+            hit = ask.lookup_rag_cache(key, db_path=missing_db)
+            self.assertIsNotNone(hit)
+            self.assertEqual(hit["response"], "Cached")
+
+            for suffix in ("", "-wal", "-shm"):
+                p = missing_db + suffix
+                if os.path.exists(p):
+                    os.remove(p)
+
+            self.assertIsNone(ask.lookup_rag_cache(key, db_path=missing_db))
+            self.assertFalse(os.path.exists(missing_db))
+
+
+class TestProvenancePriors(unittest.TestCase):
+    def test_bodleian_chunk_document_sig_status(self):
+        plain_chunks = chunk_document("Welcome pilgrims to the sacred prime path.", "plain.md")
+        self.assertEqual(len(plain_chunks), 1)
+        self.assertEqual(plain_chunks[0]["sig_status"], "none")
+
+        unverified_pgp = (
+            "-----BEGIN PGP SIGNED MESSAGE-----\n"
+            "Hash: SHA512\n\n"
+            "Key 7A35090F reference.\n"
+            "-----BEGIN PGP SIGNATURE-----\n\n"
+            "fake\n"
+            "-----END PGP SIGNATURE-----"
+        )
+        unverified_chunks = chunk_document(unverified_pgp, "unverified.md")
+        self.assertEqual(unverified_chunks[0]["sig_status"], "unverified_7A35090F_ref")
+
+        other_pgp = (
+            "-----BEGIN PGP SIGNED MESSAGE-----\n"
+            "Hash: SHA512\n\n"
+            "Signed by unknown key.\n"
+            "-----BEGIN PGP SIGNATURE-----\n\n"
+            "fake\n"
+            "-----END PGP SIGNATURE-----"
+        )
+        other_chunks = chunk_document(other_pgp, "other.md")
+        self.assertEqual(other_chunks[0]["sig_status"], "mismatch")
+
+    def test_ask_relevance_boost_provenance_priors(self):
+        from scripts.ask import _calculate_relevance_boost
+
+        doc = "welcome pilgrims sacred prime wisdom"
+        query = "welcome"
+        with patch.dict(os.environ, {"TRITHEMIUS_BOOST": "off"}):
+            s_none = _calculate_relevance_boost(doc, {"sig_status": "none"}, query, [])
+            s_empty_meta = _calculate_relevance_boost(doc, {}, query, [])
+            s_unverified = _calculate_relevance_boost(doc, {"sig_status": "unverified_7A35090F_ref"}, query, [])
+            s_unverified_flag = _calculate_relevance_boost(doc, {"is_pgp_signed": True}, query, [])
+            s_mismatch = _calculate_relevance_boost(doc, {"sig_status": "mismatch"}, query, [])
+            s_verified = _calculate_relevance_boost(doc, {"sig_status": "verified_7A35090F"}, query, [])
+
+        self.assertGreater(s_none, 0.0)
+        self.assertAlmostEqual(s_empty_meta, s_none)
+        self.assertAlmostEqual(s_unverified, s_none)
+        self.assertAlmostEqual(s_unverified_flag, s_none)
+        self.assertAlmostEqual(s_mismatch, s_none * 0.4)
+        self.assertAlmostEqual(s_verified, s_none * 1.5)
+
+    def test_bm25_retrieve_plain_chunk_gets_none_never_mismatch(self):
+        import tempfile
+        from scripts.ask import bm25_retrieve
+        with tempfile.TemporaryDirectory() as tmpdir:
+            corpus_dir = os.path.join(tmpdir, "corpus")
+            os.makedirs(corpus_dir, exist_ok=True)
+            with open(os.path.join(corpus_dir, "plain.md"), "w", encoding="utf-8") as f:
+                f.write("Welcome pilgrims to the sacred primes.")
+            with patch.dict(os.environ, {"TRITHEMIUS_BM25_PERSIST": "off"}):
+                res = bm25_retrieve("welcome pilgrims", corpus_dir=corpus_dir, k=1)
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0][1]["sig_status"], "none")
+            self.assertNotEqual(res[0][1]["sig_status"], "mismatch")
 
 
 if __name__ == "__main__":

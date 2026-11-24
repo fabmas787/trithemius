@@ -4,8 +4,13 @@ Verifies device detection, compute kernels, batch scoring equivalence, compound 
 and neural semantic scoring.
 """
 
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 import numpy as np
+
+import agents.ledger as ledger
 
 from ciphers.metal_accel import (
     is_metal_available,
@@ -163,6 +168,42 @@ class TestNeuralEngineAcceleration(unittest.TestCase):
 
 
 class TestSolverHardwareIntegration(unittest.TestCase):
+
+    def setUp(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        db_path = os.path.join(tmp_dir.name, "ledger.sqlite3")
+        vector_dir = os.path.join(tmp_dir.name, "vectordb")
+        os.makedirs(vector_dir, exist_ok=True)
+        orig_db = ledger.DB_PATH
+        orig_vec = ledger.VECTOR_DIR
+        saved_defaults = []
+        for name in dir(ledger):
+            fn = getattr(ledger, name)
+            if callable(fn) and getattr(fn, "__defaults__", None):
+                defs = fn.__defaults__
+                if orig_db in defs or orig_vec in defs:
+                    saved_defaults.append((fn, defs))
+                    fn.__defaults__ = tuple(
+                        db_path if d == orig_db else (vector_dir if d == orig_vec else d)
+                        for d in defs
+                    )
+        ledger._VECTOR_CLIENT = None
+        ledger._VECTOR_COLLECTION = None
+        p_db = patch.object(ledger, "DB_PATH", db_path)
+        p_vec = patch.object(ledger, "VECTOR_DIR", vector_dir)
+        p_db.start()
+        p_vec.start()
+
+        def _cleanup_ledger():
+            ledger._VECTOR_CLIENT = None
+            ledger._VECTOR_COLLECTION = None
+            for fn, defs in saved_defaults:
+                fn.__defaults__ = defs
+
+        self.addCleanup(p_db.stop)
+        self.addCleanup(p_vec.stop)
+        self.addCleanup(_cleanup_ledger)
 
     def test_crack_liber_primus_hardware_telemetry(self):
         """Verify crack_liber_primus returns hardware metadata and runs compound sweeps."""

@@ -199,7 +199,8 @@ def _key_to_shifts(key: Union[str, List[int]]) -> List[int]:
     - a Latin string (will be mapped to runes first)
     """
     if isinstance(key, (list, tuple)):
-        return [int(k) % 29 for k in key]
+        shifts = [int(k) % 29 for k in key]
+        return shifts if shifts else [0]
     if isinstance(key, str):
         return list(_cached_string_key_to_shifts(key))
     return [0]

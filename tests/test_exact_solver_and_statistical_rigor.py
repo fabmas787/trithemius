@@ -197,6 +197,38 @@ class TestStatisticalRigor(unittest.TestCase):
         expected_shifts = taxonomy.canonical_key_shifts(key)
         self.assertEqual(recovered_key, expected_shifts)
 
+    def test_solve_interrupter_bigram_exact_reset_on_final_column(self):
+        """Verify solve_interrupter_bigram_exact handles reset transitions from column m - 1 to 0."""
+        from ciphers.interrupter import InterrupterConfig, rune_vigenere_decode_dynamic
+        m = 3
+        rng = random.Random(2026)
+        ct_indices = [rng.randint(0, 28) for _ in range(24)]
+        ct_runes = taxonomy.indices_to_runes(ct_indices)
+        # Pointer reaches column m - 1 = 2 at index 2; trigger reset at indices 2 and 11
+        cfg = InterrupterConfig(interrupt_positions={2, 11}, reset_on_interrupt=True)
+        exact_key, exact_score = taxonomy.solve_interrupter_bigram_exact(ct_indices, m=m, config=cfg)
+
+        w_b = 0.6 / (len(ct_indices) - 1)
+        w_u = 0.4 / len(ct_indices)
+        L2 = taxonomy.RUNIC_BIGRAM_LOGP
+        L1 = taxonomy.RUNIC_UNIGRAM_LOGP
+
+        best_bf_score = -1e9
+        best_bf_key = None
+        for k0 in range(29):
+            for k1 in range(29):
+                for k2 in range(29):
+                    key = [k0, k1, k2]
+                    dec_runes = rune_vigenere_decode_dynamic(ct_runes, key, config=cfg)
+                    dec = taxonomy.clean_runes_to_indices(dec_runes)
+                    score = w_b * sum(L2[dec[i]][dec[i + 1]] for i in range(len(dec) - 1)) + w_u * sum(L1[x] for x in dec)
+                    if score > best_bf_score:
+                        best_bf_score = score
+                        best_bf_key = key
+
+        self.assertEqual(exact_key, best_bf_key)
+        self.assertAlmostEqual(exact_score, round(best_bf_score, 4), places=4)
+
     def test_period_estimators_consume_lag_spectrum(self):
         """Verify that difference_periodogram, column_ioc_scan, and kasiski consume lag spectrum consistently."""
         sample_pt = "SOME WISDOM THE PRIMES ARE SACRED THE TOTIENT FUNCTION IS SACRED ALL THINGS SHOULD BE PARED TO THEIR SIMPLEST STATE"

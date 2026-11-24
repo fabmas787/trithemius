@@ -28,10 +28,9 @@ from ciphers.interrupter import canonical_key_shifts
 from ciphers.taxonomy import sequential_mc_pvalue
 
 try:
-    from agents.ledger import log_canonical_attempt, log_attempt, count_attempts
+    from agents.ledger import log_canonical_attempt, count_attempts
 except ImportError:
     log_canonical_attempt = None
-    log_attempt = None
     count_attempts = None
 
 try:
@@ -549,16 +548,6 @@ def calibrate_solved_pages(
                         result_preview=preview,
                         method_version=1,
                         scorer_version=1,
-                        **({"db_path": db_path} if db_path else {})
-                    )
-                if log_attempt:
-                    log_attempt(
-                        page=str(pid),
-                        method=method_name,
-                        key=key_str or "none",
-                        result=f"I_MM={res.mi_mm:.4f} p={res.p_value:.3f}",
-                        success=res.is_significant,
-                        notes=f"trials={res.trials} exc={res.exceedances} bias={res.bias:.4f}",
                         **({"db_path": db_path} if db_path else {})
                     )
 

@@ -58,6 +58,7 @@ except ImportError:
     from entropy import shannon_entropy, is_high_entropy
 
 MAX_OPERAND = 10**12
+_MAX_OPERAND_DIGITS = len(str(MAX_OPERAND))
 MAX_TEXT_LEN = 10_000
 ROUTER_INDICATOR = "[Deterministic Cryptanalytic Engine — 0 LLM tokens]"
 
@@ -170,7 +171,10 @@ RE_PAGE_RAW_IT = re.compile(
 def _extract_number(match: re.Match) -> Optional[int]:
     for g in match.groups():
         if g is not None and g.isdigit():
-            return int(g)
+            normalized = g.lstrip("0") or "0"
+            if len(normalized) > _MAX_OPERAND_DIGITS:
+                return MAX_OPERAND + 1
+            return int(normalized)
     return None
 
 
@@ -264,7 +268,13 @@ def classify_query(query: str, corpus_dir: str = CORPUS_DIR) -> Dict[str, Any]:
                     break
 
         # Check if query asks why/how about a specific number's primality or totient
-        m_nums = [int(n) for n in re.findall(r"\b([0-9]+)\b", q) if int(n) <= MAX_OPERAND]
+        m_nums = []
+        for raw_num in re.findall(r"\b([0-9]+)\b", q):
+            normalized = raw_num.lstrip("0") or "0"
+            if len(normalized) <= _MAX_OPERAND_DIGITS:
+                val = int(normalized)
+                if val <= MAX_OPERAND:
+                    m_nums.append(val)
         if m_nums and any(w in q.lower() for w in ("prime", "primo", "totient", "phi", "factor", "fattor")):
             n = m_nums[0]
             gt = {

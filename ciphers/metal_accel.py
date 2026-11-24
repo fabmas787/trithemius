@@ -5,13 +5,22 @@ to perform high-throughput combinatorial key scoring, compound phrase multi-word
 and parallel Monte Carlo surrogate shuffles.
 """
 
+from __future__ import annotations
+
+import math
 import os
 import sys
 import ctypes
 import subprocess
 import logging
 from typing import List, Tuple, Dict, Any, Optional, Sequence
-import numpy as np
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    np = None
+    HAS_NUMPY = False
 
 logger = logging.getLogger("metal_accel")
 
@@ -145,6 +154,8 @@ def _load_metal_lib() -> Optional[ctypes.CDLL]:
 def is_metal_available() -> bool:
     """Return True if Apple Metal GPU compute acceleration is operational."""
     global _METAL_AVAILABLE
+    if not HAS_NUMPY:
+        return False
     if _METAL_AVAILABLE is None:
         _load_metal_lib()
     return bool(_METAL_AVAILABLE)
@@ -152,8 +163,15 @@ def is_metal_available() -> bool:
 
 def get_metal_device_info() -> Dict[str, Any]:
     """Return metadata about the Apple Silicon Metal GPU device."""
+    if not is_metal_available():
+        return {
+            "available": False,
+            "device_name": "None",
+            "max_buffer_bytes": 0,
+            "max_buffer_mb": 0.0,
+        }
     lib = _load_metal_lib()
-    if not lib or not is_metal_available():
+    if not lib:
         return {
             "available": False,
             "device_name": "None",
@@ -480,7 +498,7 @@ def benchmark_metal_throughput(num_words: int = 1000, period: int = 17) -> Dict[
         synthetic_words.append((f"WORD_{i}", shifts))
 
     # Generate synthetic T-table
-    t_table = [[-2.5 - 0.5 * np.sin(i + j) for j in range(29)] for i in range(period)]
+    t_table = [[-2.5 - 0.5 * math.sin(i + j) for j in range(29)] for i in range(period)]
 
     t0 = time.perf_counter()
     hits = metal_sweep_2words(t_table, synthetic_words, period, threshold=-2.3, max_hits=5000)

@@ -215,10 +215,14 @@ def classify_content(text: str, filename: str) -> Dict[str, Any]:
 
     category = "page_transcript" if identified_page else ("analysis_writeup" if not has_runes else "misc_runic")
 
-    if pgp_info["has_pgp_block"]:
-        sig_status = "verified_7A35090F" if pgp_info["is_official_key"] else "mismatch"
-    else:
-        sig_status = "unsigned"
+    pgp_verdict_map = {
+        "AUTHENTIC_CICADA_PGP_VERIFIED": "verified_7A35090F",
+        "UNVERIFIED_KEY_ID_REFERENCED": "unverified_7A35090F_ref",
+        "PGP_SIGNATURE_MISMATCH": "mismatch",
+        "SIGNED_BY_UNKNOWN_KEY": "mismatch",
+        "NO_PGP_BLOCK": "none",
+    }
+    sig_status = pgp_verdict_map.get(pgp_info.get("verdict", ""), "none")
 
     return {
         "page": identified_page,

@@ -217,7 +217,7 @@ class ConsoleRenderer:
             ],
         },
         "/crack": {
-            "syntax": "/crack <text_filepath_or_page> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]",
+            "syntax": "/crack <text_filepath_or_page> [--deep] [--compound] [--randomize] [--rotations] [--crib-limit N] [--top-k N] [--no-metal] [--no-ane]",
             "summary": "Automated Liber Primus GF(29) Cryptanalytic Cascade Solver with Apple Silicon Acceleration",
             "description": (
                 "Executes the full end-to-end cryptanalytic taxonomy pipeline:\n"
@@ -234,9 +234,11 @@ class ConsoleRenderer:
             ),
             "options": [
                 "--deep: Expand search to affine GF(29) transforms, autokey, and cross-page running keys",
-                "--compound / --comp: Sweep exhaustive compound multi-word phrases (w1 + w2) on Metal GPU",
-                "--random / --rand: Randomize candidate vocabulary selection from full corpus lexicon",
-                "--rotations / --rot: Evaluate all cyclic phase rotations for every dictionary keyword",
+                "--compound: Sweep exhaustive compound multi-word phrases (w1 + w2) on Metal GPU",
+                "--randomize / --random: Randomize candidate vocabulary selection from full corpus lexicon",
+                "--rotations: Evaluate all cyclic phase rotations for every dictionary keyword",
+                "--crib-limit N: Maximum number of crib candidates to evaluate (positive int)",
+                "--top-k N: Number of top candidate decryptions to display (default: 5)",
                 "--no-metal: Disable Apple Silicon Metal GPU acceleration",
                 "--no-ane: Disable Apple Neural Engine semantic reranking",
             ],
@@ -245,7 +247,8 @@ class ConsoleRenderer:
                 "/crack corpus/page_56_runes.md",
                 "/crack 56 --compound",
                 "/crack 56 --deep",
-                "/crack 56 --random --rotations",
+                "/crack 56 --randomize --rotations",
+                "/crack 56 --crib-limit 200 --top-k 3",
                 "/crack \"ᛠᛁᚪ᛫ᛋᚣᛗᛞᚣᛋ᛫ᛒᛞᛄᛞ...\"",
             ],
         },
@@ -410,7 +413,7 @@ class ConsoleRenderer:
             ],
         },
         "/think": {
-            "syntax": "/think [on|off]",
+            "syntax": "/think [on|off|toggle]",
             "summary": "Toggle Chain-of-Thought (CoT) reasoning for reasoning models",
             "description": (
                 "Enables or disables Chain-of-Thought reasoning for models that support it\n"
@@ -420,11 +423,12 @@ class ConsoleRenderer:
             "options": [
                 "on / true / 1: Force enable reasoning",
                 "off / false / 0: Force disable reasoning",
-                "no argument: Toggle current state",
+                "toggle / no argument: Toggle current state",
             ],
             "examples": [
                 "/think on",
                 "/think off",
+                "/think toggle",
                 "/think",
             ],
         },
@@ -544,13 +548,13 @@ class ConsoleRenderer:
         },
         "/cache": {
             "syntax": "/cache clear",
-            "summary": "Clear exact RAG response cache in vectordb/.rag_cache.json",
+            "summary": "Clear exact RAG response cache in vectordb/cache.sqlite3",
             "description": (
                 "Flushes all cached deterministic and RAG inference responses,\n"
                 "forcing subsequent queries to perform fresh retrieval and generation."
             ),
             "options": [
-                "clear: Purge cache file",
+                "clear: Purge cache database",
             ],
             "examples": [
                 "/cache clear",
@@ -1152,6 +1156,18 @@ class ConsoleRenderer:
             print(f"| {fname:<15} {r['mi_raw']:<10.4f} {r['bias']:<10.4f} {r['mi_mm']:<10.4f} {r['p_value']:<8.3f} {r['trials']:<7d} {r['outcome'][:15]}")
         print("+--------------------------------------------------------------------------\n")
 
+    def print_explain(self, steps: Optional[List[dict]] = None):
+        """Display mathematical calculation trace."""
+        if not steps:
+            print("\n[!] No calculation trace available. Run /crack first.\n")
+            return
+        print("\n+--- [MATHEMATICAL CALCULATION TRACE] -------------------------------------")
+        for s in steps:
+            print(f"| {s.get('stage')} ({s.get('module')}):")
+            print(f"|   Formula: {s.get('formula')}")
+            print(f"|   Result:  {s.get('result')} [{s.get('verdict')}]")
+        print("+--------------------------------------------------------------------------\n")
+
 
     def print_command_list(self):
         """Display refined, categorized command reference divided by type."""
@@ -1236,13 +1252,13 @@ class ConsoleRenderer:
             ]),
             ("4. MODEL, ENGINE & HARDWARE CONFIGURATION", [
                 ("/key [show|clear|<p> <k>]", "AI API keys & cloud provider configuration section"),
-                ("/think [on|off]", "Toggle Chain-of-Thought (CoT) reasoning for reasoning models"),
+                ("/think [on|off|toggle]", "Toggle Chain-of-Thought (CoT) reasoning for reasoning models"),
                 ("/boost [on|off|status]", "Toggle Deep Cryptanalytic Retrieval & Reranking Boost mode"),
                 ("/provider [name]", "Switch active LLM provider (ollama, groq, openai, anthropic, etc.)"),
                 ("/model [key_or_name]", "Switch active language model key or specify custom model"),
                 ("/host [url]", "Set remote Ollama streaming endpoint host URL"),
                 ("/profile [mode]", "Toggle hardware profile between standard and low-spec footprint"),
-                ("/cache clear", "Clear exact RAG response cache in vectordb/.rag_cache.json"),
+                ("/cache clear", "Clear exact RAG response cache in vectordb/cache.sqlite3"),
             ]),
             ("5. TELEMETRY, BENCHMARKING & SYSTEM", [
                 ("/status", "Display system telemetry, provider health, model & corpus metrics"),

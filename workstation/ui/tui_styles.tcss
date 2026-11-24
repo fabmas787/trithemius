@@ -1,0 +1,140 @@
+/* Trithemius Textual Dashboard Stylesheet */
+
+Screen {
+    background: $surface-darken-1;
+    color: $text;
+}
+
+#header_bar {
+    dock: top;
+    height: 3;
+    background: $panel;
+    color: $accent;
+    border-bottom: heavy $accent-darken-2;
+    padding: 0 1;
+}
+
+.header_title {
+    text-style: bold;
+    color: $accent-lighten-1;
+}
+
+.header_badge {
+    background: $accent-darken-3;
+    color: $text;
+    padding: 0 1;
+    margin: 0 1;
+}
+
+#tabbed_content {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0;
+}
+
+/* Solver Tab Layout */
+#solver_container {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#solver_container.vertical_stack {
+    layout: vertical;
+}
+
+#telemetry_pane {
+    width: 50%;
+    height: 100%;
+    border-right: vkey $primary-darken-2;
+    padding: 0 1;
+}
+
+#solver_container.vertical_stack #telemetry_pane {
+    width: 100%;
+    height: 50%;
+    border-right: none;
+    border-bottom: hkey $primary-darken-2;
+}
+
+#leaderboard_pane {
+    width: 50%;
+    height: 100%;
+    padding: 0 1;
+}
+
+#solver_container.vertical_stack #leaderboard_pane {
+    width: 100%;
+    height: 50%;
+}
+
+.section_title {
+    text-style: bold;
+    color: $accent;
+    padding: 0 0 1 0;
+}
+
+#phase_progress {
+    margin: 1 0;
+}
+
+#calc_trace {
+    height: 1fr;
+    background: $surface;
+    border: solid $surface-lighten-1;
+    padding: 0 1;
+}
+
+#leaderboard {
+    height: 1fr;
+    background: $surface;
+    border: solid $surface-lighten-1;
+}
+
+#console_log {
+    height: 1fr;
+    background: $surface;
+    padding: 1;
+}
+
+/* Command Bar */
+#command_container {
+    dock: bottom;
+    height: 3;
+    background: $panel;
+    border-top: heavy $accent-darken-2;
+    padding: 0 1;
+    layout: horizontal;
+}
+
+#status_badge {
+    width: 16;
+    height: 1;
+    margin: 0 1;
+    text-align: center;
+    text-style: bold;
+    background: $success-darken-2;
+    color: $text;
+}
+
+#status_badge.running {
+    background: $warning-darken-1;
+    color: $text;
+}
+
+#status_badge.cancelling {
+    background: $error-darken-1;
+    color: $text;
+}
+
+#command_input {
+    width: 1fr;
+    background: $surface-lighten-1;
+    border: none;
+}
+
+/* Compact layout for small terminal height (< 24) */
+Screen.compact_height #header_bar {
+    height: 1;
+}

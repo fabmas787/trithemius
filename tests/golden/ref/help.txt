@@ -3,13 +3,14 @@ rc=0
 usage: trithemius.py [-h] [--model MODEL] [--moe] [--provider PROVIDER]
                      [--api-key API_KEY] [--ollama-host OLLAMA_HOST]
                      [--low-spec] [--think] [--boost] [--json]
-                     {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache}
+                     [--tui | --no-tui]
+                     {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache,explain,trace}
                      ...
 
 Trithemius Liber Primus Cryptanalytic Workstation
 
 positional arguments:
-  {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache}
+  {boost,help,web,ask,gematria,atbash,vigenere,totient-stream,totient,solve,crack,triage,period,crib,opsec,layout,organize,ingest,page,bench,status,running-key,running-key-scan,lexicon,key,keys,hardware,gpu,metal,ane,ledger,think,provider,model,host,profile,cache,explain,trace}
                         Direct CLI subcommand
     boost               Toggle, set, or inspect Cryptanalytic Boost mode
     help                Display command reference manual or command details
@@ -52,6 +53,9 @@ positional arguments:
     host                Set Ollama host
     profile             Toggle hardware profile
     cache               Manage RAG cache
+    explain             Inspect mathematical calculation trace from last
+                        operation
+    trace               Alias for 'explain'
 
 options:
   -h, --help            show this help message and exit
@@ -67,5 +71,6 @@ options:
   --boost               Enable Deep Cryptanalytic Retrieval and Reranking
                         Boost mode
   --json                Format CLI output as machine-readable JSON
+  --tui, --no-tui       Enable or disable interactive Textual TUI dashboard
 
 --stderr--

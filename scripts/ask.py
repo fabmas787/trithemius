@@ -107,34 +107,48 @@ def rag_cache_key(query: str, corpus_digest: str, provider: str, model: str,
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+_INITIALIZED_CACHE_DBS: set[str] = set()
+
+
+def _ensure_cache_schema(db_path: str = CACHE_DB_PATH) -> None:
+    """Initialize rag_cache SQLite schema and purge expired entries once per DB path."""
+    if db_path in _INITIALIZED_CACHE_DBS and os.path.exists(db_path):
+        return
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=5.0)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS rag_cache (
+                cache_key TEXT PRIMARY KEY,
+                query_norm TEXT NOT NULL,
+                corpus_digest TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                think_flag INTEGER NOT NULL,
+                prompt_version TEXT NOT NULL,
+                retrieval_mode TEXT NOT NULL,
+                response_text TEXT NOT NULL,
+                sources_json TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                last_access_at REAL NOT NULL,
+                hit_count INTEGER DEFAULT 0
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_cache_access ON rag_cache (last_access_at)")
+        # TTL: Purge entries older than 7 days (604800 seconds)
+        cutoff = time.time() - 604800
+        conn.execute("DELETE FROM rag_cache WHERE created_at < ?", (cutoff,))
+        conn.commit()
+        _INITIALIZED_CACHE_DBS.add(db_path)
+    finally:
+        conn.close()
+
+
 def _get_cache_db(db_path: str = CACHE_DB_PATH):
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS rag_cache (
-            cache_key TEXT PRIMARY KEY,
-            query_norm TEXT NOT NULL,
-            corpus_digest TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            model TEXT NOT NULL,
-            think_flag INTEGER NOT NULL,
-            prompt_version TEXT NOT NULL,
-            retrieval_mode TEXT NOT NULL,
-            response_text TEXT NOT NULL,
-            sources_json TEXT NOT NULL,
-            created_at REAL NOT NULL,
-            last_access_at REAL NOT NULL,
-            hit_count INTEGER DEFAULT 0
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_cache_access ON rag_cache (last_access_at)")
-    # TTL: Purge entries older than 7 days (604800 seconds)
-    cutoff = time.time() - 604800
-    conn.execute("DELETE FROM rag_cache WHERE created_at < ?", (cutoff,))
-    conn.commit()
-    return conn
+    _ensure_cache_schema(db_path)
+    return sqlite3.connect(db_path, timeout=5.0)
 
 
 def lookup_rag_cache(cache_key: str, db_path: str = CACHE_DB_PATH) -> Optional[dict]:
@@ -142,29 +156,38 @@ def lookup_rag_cache(cache_key: str, db_path: str = CACHE_DB_PATH) -> Optional[d
     if os.environ.get("TRITHEMIUS_CACHE", "on").lower() == "off":
         return None
     if not os.path.exists(db_path):
+        _INITIALIZED_CACHE_DBS.discard(db_path)
         return None
+    conn = None
     try:
-        conn = _get_cache_db(db_path)
-        now = time.time()
-        cur = conn.execute(
-            "SELECT response_text, sources_json FROM rag_cache WHERE cache_key = ?",
-            (cache_key,)
-        )
-        row = cur.fetchone()
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        try:
+            cur = conn.execute(
+                "SELECT response_text, sources_json FROM rag_cache WHERE cache_key = ?",
+                (cache_key,)
+            )
+            row = cur.fetchone()
+        except sqlite3.OperationalError:
+            return None
         if row:
+            now = time.time()
             conn.execute(
                 "UPDATE rag_cache SET last_access_at = ?, hit_count = hit_count + 1 WHERE cache_key = ?",
                 (now, cache_key)
             )
             conn.commit()
-            conn.close()
             return {
                 "response": row[0],
                 "sources": json.loads(row[1]) if row[1] else [],
             }
-        conn.close()
     except Exception:
         pass
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return None
 
 
@@ -178,30 +201,33 @@ def store_rag_cache(cache_key: str, query: str, corpus_digest: str, provider: st
     if not response_text or not response_text.strip():
         return
     try:
-        conn = _get_cache_db(db_path)
-        now = time.time()
-        q_norm = normalize_query_for_cache(query)
-        sources_str = json.dumps(sources)
-        conn.execute("""
-            INSERT OR REPLACE INTO rag_cache (
-                cache_key, query_norm, corpus_digest, provider, model, think_flag,
-                prompt_version, retrieval_mode, response_text, sources_json, created_at, last_access_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            cache_key, q_norm, corpus_digest, provider.lower(), model, int(think),
-            prompt_version, retrieval_mode, response_text.strip(), sources_str, now, now
-        ))
-        cur = conn.execute("SELECT COUNT(*) FROM rag_cache")
-        count = cur.fetchone()[0]
-        if count > max_entries:
-            excess = count - max_entries
+        _ensure_cache_schema(db_path)
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        try:
+            now = time.time()
+            q_norm = normalize_query_for_cache(query)
+            sources_str = json.dumps(sources)
             conn.execute("""
-                DELETE FROM rag_cache WHERE cache_key IN (
-                    SELECT cache_key FROM rag_cache ORDER BY last_access_at ASC LIMIT ?
-                )
-            """, (excess,))
-        conn.commit()
-        conn.close()
+                INSERT OR REPLACE INTO rag_cache (
+                    cache_key, query_norm, corpus_digest, provider, model, think_flag,
+                    prompt_version, retrieval_mode, response_text, sources_json, created_at, last_access_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                cache_key, q_norm, corpus_digest, provider.lower(), model, int(think),
+                prompt_version, retrieval_mode, response_text.strip(), sources_str, now, now
+            ))
+            cur = conn.execute("SELECT COUNT(*) FROM rag_cache")
+            count = cur.fetchone()[0]
+            if count > max_entries:
+                excess = count - max_entries
+                conn.execute("""
+                    DELETE FROM rag_cache WHERE cache_key IN (
+                        SELECT cache_key FROM rag_cache ORDER BY last_access_at ASC LIMIT ?
+                    )
+                """, (excess,))
+            conn.commit()
+        finally:
+            conn.close()
     except Exception:
         pass
 
@@ -209,14 +235,20 @@ def store_rag_cache(cache_key: str, query: str, corpus_digest: str, provider: st
 def clear_rag_cache(db_path: str = CACHE_DB_PATH) -> bool:
     """Clear all cached responses from rag_cache."""
     try:
+        _INITIALIZED_CACHE_DBS.discard(db_path)
         if os.path.exists(db_path):
-            conn = _get_cache_db(db_path)
-            conn.execute("DELETE FROM rag_cache")
-            conn.commit()
-            conn.close()
+            _ensure_cache_schema(db_path)
+            conn = sqlite3.connect(db_path, timeout=5.0)
+            try:
+                conn.execute("DELETE FROM rag_cache")
+                conn.commit()
+            finally:
+                conn.close()
         return True
     except Exception:
         return False
+    finally:
+        _INITIALIZED_CACHE_DBS.discard(db_path)
 
 
 RUNE_REGEX = re.compile(r"[\u16A0-\u16FF]")
@@ -255,6 +287,38 @@ def detect_page_in_query(query: str):
     return None
 
 
+try:
+    from ciphers.opsec import inspect_pgp_text
+except ImportError:
+    try:
+        from opsec import inspect_pgp_text
+    except ImportError:
+        inspect_pgp_text = None
+
+_PGP_VERDICT_TO_SIG_STATUS = {
+    "AUTHENTIC_CICADA_PGP_VERIFIED": "verified_7A35090F",
+    "UNVERIFIED_KEY_ID_REFERENCED": "unverified_7A35090F_ref",
+    "PGP_SIGNATURE_MISMATCH": "mismatch",
+    "SIGNED_BY_UNKNOWN_KEY": "mismatch",
+    "NO_PGP_BLOCK": "none",
+}
+
+
+def _classify_sig_status(content: str) -> Tuple[bool, str]:
+    """Classify PGP provenance without running RSA verification in retrieval hot paths."""
+    if inspect_pgp_text is not None:
+        pgp_info = inspect_pgp_text(content, verify_crypto=False)
+        is_pgp = bool(pgp_info.get("has_pgp_block"))
+        sig_status = _PGP_VERDICT_TO_SIG_STATUS.get(pgp_info.get("verdict", ""), "none")
+        return is_pgp, sig_status
+    has_block = ("-----BEGIN PGP SIGNED MESSAGE-----" in content) and ("-----BEGIN PGP SIGNATURE-----" in content)
+    if not has_block:
+        return False, "none"
+    if "7A35090F" in content.upper() or "6D854CD7933322A601C3286D181F01E57A35090F" in content.upper().replace(" ", ""):
+        return True, "unverified_7A35090F_ref"
+    return True, "mismatch"
+
+
 def _calculate_relevance_boost(doc: str, meta: dict, query: str, query_runes: list) -> float:
     """Compute lexical and cryptographic relevance boost for hybrid reranking."""
     score = 0.0
@@ -288,18 +352,18 @@ def _calculate_relevance_boost(doc: str, meta: dict, query: str, query_runes: li
         if meta.get("is_pgp_signed") and any(w in query_lower for w in ("pgp", "signature", "signed", "key", "opsec")):
             score += 0.30
 
-    # Provenance prior in retrieval (P2): verified 1.5, unsigned 1.0, mismatch 0.4
+    # Provenance prior in retrieval (P2): verified 1.5, unverified/none/unsigned 1.0, mismatch 0.4
     prior = 1.0
     if meta:
         sig_status = meta.get("sig_status")
         if not sig_status:
-            sig_status = "verified_7A35090F" if meta.get("is_pgp_signed") else "unsigned"
+            sig_status = "unverified_7A35090F_ref" if meta.get("is_pgp_signed") else "none"
 
         if sig_status == "verified_7A35090F":
             prior = 1.5
         elif sig_status == "mismatch":
             prior = 0.4
-        elif sig_status == "unsigned":
+        elif sig_status in ("unverified_7A35090F_ref", "none", "unsigned"):
             prior = 1.0
 
         if meta.get("overlay_flag"):
@@ -434,11 +498,7 @@ def bm25_retrieve(query: str, corpus_dir: str = CORPUS_DIR, k: int = TOP_K, inde
                     page_val = hdr_m.group(1)
 
             has_runes = bool(RUNE_REGEX.search(content))
-            is_pgp = "-----BEGIN PGP" in content
-            if is_pgp:
-                sig_status = "verified_7A35090F" if "7A35090F" in content.upper() else "mismatch"
-            else:
-                sig_status = "unsigned"
+            is_pgp, sig_status = _classify_sig_status(content)
 
             meta = {
                 "source": rel_path if "/" in rel_path else fname,
@@ -528,7 +588,12 @@ def bm25_retrieve(query: str, corpus_dir: str = CORPUS_DIR, k: int = TOP_K, inde
                 den = tf + k1 * (1.0 - b + b * (dl / max(1.0, avgdl)))
                 score += idf * (num / den)
 
-        boost = _calculate_relevance_boost(chunk_text, meta, query, query_runes)
+        effective_meta = meta
+        if not meta or not meta.get("sig_status"):
+            _, inferred_sig = _classify_sig_status(chunk_text)
+            effective_meta = dict(meta or {})
+            effective_meta["sig_status"] = inferred_sig
+        boost = _calculate_relevance_boost(chunk_text, effective_meta, query, query_runes)
         score += boost * 2.0
 
         if page_target and meta.get("page") == str(int(page_target) if page_target.isdigit() else page_target):
@@ -667,7 +732,7 @@ def stream_chat(model_name: str, prompt: str, think: bool = False, provider: str
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            options={"num_ctx": CONTEXT_WINDOW, "num_predict": DEFAULT_NUM_PREDICT},
+            options={"num_ctx": config.DEFAULT_NUM_CTX, "num_predict": config.DEFAULT_NUM_PREDICT},
             stream=True,
             think=think,
         )
@@ -769,11 +834,7 @@ def main():
 
         web_context = None
         if use_web:
-            print("[Searching live web via Bacon module...]")
-            try:
-                web_context = web_context_block(query, max_results=3, fetch_full=False)
-            except Exception as e:
-                web_context = f"[Web search failed: {e}]"
+            print("[*] Live web search disabled (running in offline local corpus mode).")
 
         if not retrieved and not web_context:
             print("Trithemius: No ingested corpus documents found yet. Place files in corpus/ and run 'python3 scripts/bodleian.py'.\n")
@@ -783,10 +844,10 @@ def main():
 
         print("\nTrithemius: ", end="", flush=True)
         try:
-            stream_chat(active_model, prompt, think=args.think)
+            stream_chat(active_model, prompt, think=args.think, provider=chosen_provider)
         except Exception as e:
-            print(f"\n[Error communicating with model {active_model} via Ollama: {e}]")
-            print("Check that Ollama is running and the model is pulled (`ollama pull <model>`).\n")
+            print(f"\n[Error communicating with model {active_model} via {chosen_provider}: {e}]")
+            print("Check that your inference provider is running and credentials/models are configured.\n")
 
 
 if __name__ == "__main__":

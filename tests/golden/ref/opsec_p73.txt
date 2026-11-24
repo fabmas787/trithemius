@@ -5,7 +5,7 @@ rc=0
 | File:            corpus/page_73_an_end.md (783 bytes)
 | Detected Type:   Unknown / Plain Text
 | Steg Target?     False
-| PGP Verdict:     [NO_PGP_SIGNATURE]
+| PGP Verdict:     [NO_PGP_BLOCK]
 | Authentic 3301:  False (Official Key: 7A35090F)
 | Shannon Entropy: 5.6889 bits/char (High Entropy? True)
 | Index of Coinc:  0.0461

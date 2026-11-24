@@ -192,6 +192,15 @@ def _annotate_chunk_with_runes(chunk_str: str) -> Tuple[str, int, int]:
     return chunk_str, rune_count, g_sum
 
 
+_PGP_VERDICT_TO_SIG_STATUS = {
+    "AUTHENTIC_CICADA_PGP_VERIFIED": "verified_7A35090F",
+    "UNVERIFIED_KEY_ID_REFERENCED": "unverified_7A35090F_ref",
+    "PGP_SIGNATURE_MISMATCH": "mismatch",
+    "SIGNED_BY_UNKNOWN_KEY": "mismatch",
+    "NO_PGP_BLOCK": "none",
+}
+
+
 def chunk_document(text: str, filename: str) -> List[Dict]:
     """
     Intelligently chunk text preserving paragraphs, page headers, rune blocks,
@@ -215,10 +224,7 @@ def chunk_document(text: str, filename: str) -> List[Dict]:
             processed_str = processed_str[:MAX_CHUNK_CHARS]
 
         pgp_info = inspect_pgp_text(processed_str)
-        if pgp_info["has_pgp_block"]:
-            sig_status = "verified_7A35090F" if pgp_info["is_official_key"] else "mismatch"
-        else:
-            sig_status = "unsigned"
+        sig_status = _PGP_VERDICT_TO_SIG_STATUS.get(pgp_info.get("verdict", ""), "none")
 
         c_hash = normalized_sha256(processed_str) if normalized_sha256 else hashlib.sha256(processed_str.encode("utf-8")).hexdigest()
 
@@ -374,6 +380,7 @@ def main():
             h_val = shannon_entropy(chunk_text_str)
             ioc_val = index_of_coincidence(chunk_text_str)
             pgp_res = inspect_pgp_text(chunk_text_str)
+            sig_status = _PGP_VERDICT_TO_SIG_STATUS.get(pgp_res.get("verdict", ""), "none")
 
             chunk_id = f"{fname}-{chunk_data['chunk_index']}"
             ids.append(chunk_id)
@@ -393,6 +400,7 @@ def main():
                 "is_high_entropy": int(is_high_entropy(chunk_text_str)),
                 "is_pgp_signed": int(pgp_res["has_pgp_block"]),
                 "is_official_cicada": int(pgp_res["is_official_key"]),
+                "sig_status": sig_status,
             })
 
         if ids:

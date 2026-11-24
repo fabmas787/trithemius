@@ -19,21 +19,12 @@ CICADA_KEY_ID = "7A35090F"
 # Official Primary Key Fingerprint (verified against 2012 messages and RFC 4880 v4 key packets)
 CICADA_PRIMARY_FINGERPRINT = "6D854CD7933322A601C3286D181F01E57A35090F"
 CICADA_FINGERPRINT = CICADA_PRIMARY_FINGERPRINT
+CICADA_7A35090F_PUBLIC_KEY = ""
 LEGACY_FINGERPRINTS = {
     "853F5664D046F538E6FD93DCA14E29287A35090F",
     "853F5664D046F538E6F56F144D2A92E87A35090F",
     "52C140A7325F33B47136295020EE2E877A35090F",
 }
-
-try:
-    from ciphers.zimmermann import verify_cleartext, verify_detached, parse_keys
-except ImportError:
-    try:
-        from zimmermann import verify_cleartext, verify_detached, parse_keys
-    except ImportError:
-        verify_cleartext = None
-        verify_detached = None
-        parse_keys = None
 
 PGP_SIGNED_REGEX = re.compile(
     r"-----BEGIN PGP SIGNED MESSAGE-----[\s\S]+?-----BEGIN PGP SIGNATURE-----[\s\S]+?-----END PGP SIGNATURE-----",
@@ -58,35 +49,65 @@ def extract_pgp_blocks(text: str) -> list:
     return PGP_SIGNED_REGEX.findall(text)
 
 
-def inspect_pgp_text(text: str) -> Dict[str, any]:
+def inspect_pgp_text(
+    text: str,
+    pubkey_block: Optional[str] = None,
+    verify_crypto: bool = True,
+) -> Dict[str, Any]:
     """
-    Examine text for PGP signatures and check if they reference Cicada's official key (7A35090F).
+    Examine text for PGP signatures and optionally verify cryptographically against
+    Cicada's pinned primary key fingerprint (6D854CD7933322A601C3286D181F01E57A35090F).
     """
     has_pgp = "-----BEGIN PGP SIGNED MESSAGE-----" in text
     has_signature = "-----BEGIN PGP SIGNATURE-----" in text
+    has_pgp_block = has_pgp and has_signature
 
     upper = text.upper()
     mentions_key = CICADA_KEY_ID in upper
-    mentions_fp = CICADA_FINGERPRINT in upper.replace(" ", "")
+    mentions_fp = CICADA_PRIMARY_FINGERPRINT in upper.replace(" ", "")
+    key_id_found = CICADA_KEY_ID if (mentions_key or mentions_fp) else None
 
-    is_official = False
-    verdict = "UNVERIFIED"
+    if not has_pgp_block:
+        return {
+            "has_pgp_block": False,
+            "is_official_key": False,
+            "cryptographically_verified": False,
+            "key_id_found": key_id_found,
+            "verdict": "NO_PGP_BLOCK",
+            "primary_fingerprint_pinned": CICADA_PRIMARY_FINGERPRINT,
+        }
 
-    if has_pgp and has_signature:
-        if mentions_key or mentions_fp:
-            is_official = True
-            verdict = "AUTHENTIC_CICADA_KEY_REFERENCED"
-        else:
-            verdict = "SIGNED_BY_UNKNOWN_KEY"
-    elif mentions_key:
-        verdict = "MENTIONS_CICADA_KEY_UNSIGNED"
+    effective_pubkey = pubkey_block or CICADA_7A35090F_PUBLIC_KEY
+    if verify_crypto and effective_pubkey:
+        crypto_res = verify_cicada_message(text, pubkey_block=effective_pubkey)
+        if crypto_res.get("authentic") is True:
+            return {
+                "has_pgp_block": True,
+                "is_official_key": True,
+                "cryptographically_verified": True,
+                "key_id_found": CICADA_KEY_ID,
+                "verdict": "AUTHENTIC_CICADA_PGP_VERIFIED",
+                "primary_fingerprint_pinned": CICADA_PRIMARY_FINGERPRINT,
+            }
+        return {
+            "has_pgp_block": True,
+            "is_official_key": False,
+            "cryptographically_verified": False,
+            "key_id_found": key_id_found,
+            "verdict": "PGP_SIGNATURE_MISMATCH",
+            "primary_fingerprint_pinned": CICADA_PRIMARY_FINGERPRINT,
+        }
+
+    if mentions_key or mentions_fp:
+        verdict = "UNVERIFIED_KEY_ID_REFERENCED"
     else:
-        verdict = "NO_PGP_SIGNATURE"
+        verdict = "SIGNED_BY_UNKNOWN_KEY"
 
     return {
-        "has_pgp_block": has_pgp and has_signature,
-        "is_official_key": is_official,
-        "key_id_found": CICADA_KEY_ID if mentions_key else None,
+        "has_pgp_block": True,
+        "is_official_key": False,
+        "cryptographically_verified": False,
+        "key_id_found": key_id_found,
         "verdict": verdict,
         "primary_fingerprint_pinned": CICADA_PRIMARY_FINGERPRINT,
     }
@@ -97,12 +118,19 @@ def verify_cicada_message(text: str, pubkey_block: Optional[str] = None) -> Dict
     Perform full cryptographic verification of an OpenPGP cleartext signed message
     against the pinned Cicada 3301 primary key fingerprint.
     """
-    if verify_cleartext is None:
-        return {"error": "zimmermann module not available"}
-    if not pubkey_block:
-        return {"error": "No public key block provided for cryptographic verification"}
     try:
-        return verify_cleartext(text, pubkey_block, pinned_fingerprint=CICADA_PRIMARY_FINGERPRINT)
+        from ciphers.zimmermann import verify_cleartext
+    except ImportError:
+        try:
+            from zimmermann import verify_cleartext
+        except ImportError:
+            return {"valid_signature": False, "authentic": False, "error": "zimmermann module not available"}
+
+    effective_pubkey = pubkey_block or CICADA_7A35090F_PUBLIC_KEY
+    if not effective_pubkey:
+        return {"valid_signature": False, "authentic": False, "error": "No public key block provided for cryptographic verification"}
+    try:
+        return verify_cleartext(text, effective_pubkey, pinned_fingerprint=CICADA_PRIMARY_FINGERPRINT)
     except Exception as e:
         return {"valid_signature": False, "authentic": False, "error": str(e)}
 
@@ -171,5 +199,14 @@ iQIcBAEBCgAGBQJPt58eAAoJEKFOKSB6NQkPgN0P/25g==
     res = inspect_pgp_text(sample_cicada_block)
     print("PGP Verification Result:")
     print(res)
-    assert res["is_official_key"] is True
+    assert res["has_pgp_block"] is True
+    assert res["is_official_key"] is False
+    assert res["cryptographically_verified"] is False
+    assert res["verdict"] == "UNVERIFIED_KEY_ID_REFERENCED"
+
+    res_plain = inspect_pgp_text("Plain corpus note without PGP armor.")
+    assert res_plain["has_pgp_block"] is False
+    assert res_plain["is_official_key"] is False
+    assert res_plain["cryptographically_verified"] is False
+    assert res_plain["verdict"] == "NO_PGP_BLOCK"
     print("\nOpSec Test: SUCCESS!")

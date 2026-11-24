@@ -15,7 +15,21 @@ Features:
 import os
 import sys
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple, Union
+import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+try:
+    from ciphers.telemetry import (
+        TelemetryEmitter,
+        PhaseStatus,
+        CalcStepEvent,
+        CandidateEvent,
+    )
+except ImportError:
+    TelemetryEmitter = None
+    PhaseStatus = None
+    CalcStepEvent = None
+    CandidateEvent = None
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
@@ -208,6 +222,9 @@ def scan_keystream(
     f_skip: bool = False,
     step: int = 1,
     top_k: int = 5,
+    source_file: str = "",
+    progress_callback: Optional[Callable[[Any], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> List[Dict[str, Any]]:
     """
     Slides over all valid offsets in key_stream with the given step, decrypts,
@@ -225,11 +242,36 @@ def scan_keystream(
     max_offset = n_k - n_c
     mode_norm = mode.lower().strip()
     step_val = max(1, step)
+    emitter = TelemetryEmitter(progress_callback) if TelemetryEmitter and progress_callback else None
 
     # Fast arithmetic loop: decrypt integer indices directly without string decoding
     scored_offsets: List[Tuple[float, int, List[int]]] = []
+    null_mean = -3.45
+    null_std = 0.15
+    try:
+        from ciphers.taxonomy import surrogate_shuffle_test
+        base_sig = surrogate_shuffle_test(cipher_indices, -4.0, n_shuffles=25, seed=3301)
+        if base_sig and base_sig.std_null > 1e-6:
+            null_mean = base_sig.mean_null
+            null_std = base_sig.std_null
+    except Exception:
+        pass
 
     for offset in range(0, max_offset + 1, step_val):
+        if cancel_event is not None and cancel_event.is_set():
+            break
+
+        if emitter:
+            emitter.emit_phase(
+                phase_id=1,
+                total_phases=1,
+                name=f"Running Key Scan ({source_file or 'stream'})",
+                status=PhaseStatus.PROGRESS,
+                completed=offset,
+                total=max_offset,
+                message=f"Mode: {mode_norm}, f_skip: {f_skip}",
+            )
+
         if not f_skip:
             sub_key = key_stream[offset:offset + n_c]
             if mode_norm == "sub":
@@ -259,6 +301,20 @@ def scan_keystream(
 
         score = score_composite_runes(plain_indices)
         scored_offsets.append((score, offset, plain_indices))
+
+        if score >= GATEKEEPER_THRESHOLD and emitter:
+            rune_str = "".join(index_to_rune(p) for p in plain_indices)
+            latin_str = decode_runes(rune_str)
+            rk_z = round((score - null_mean) / null_std, 2) if null_std > 1e-6 else None
+            emitter.emit_candidate(
+                candidate_id=f"rk_{source_file}_{offset}_{mode_norm}_{f_skip}",
+                method=f"RUNNING_KEY_{mode_norm.upper()}_{'FSKIP' if f_skip else 'NO_SKIP'}",
+                key=f"Offset {offset} ({source_file})",
+                score=round(score, 4),
+                threshold=GATEKEEPER_THRESHOLD,
+                plaintext_preview=latin_str[:80],
+                z_score=rk_z,
+            )
 
     # Sort descending by score and keep top_k
     scored_offsets.sort(key=lambda x: -x[0])
@@ -293,6 +349,8 @@ def scan_reference_file(
     f_skips: Optional[List[bool]] = None,
     step: int = 1,
     top_k: int = 5,
+    progress_callback: Optional[Callable[[Any], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> List[Dict[str, Any]]:
     """
     Scans a reference text file as a running key against the given cipher indices
@@ -317,7 +375,11 @@ def scan_reference_file(
     fname = os.path.basename(file_path)
 
     for m in modes:
+        if cancel_event is not None and cancel_event.is_set():
+            break
         for fs in f_skips:
+            if cancel_event is not None and cancel_event.is_set():
+                break
             res = scan_keystream(
                 cipher_indices=cipher_indices,
                 key_stream=key_stream,
@@ -325,6 +387,9 @@ def scan_reference_file(
                 f_skip=fs,
                 step=step,
                 top_k=top_k,
+                source_file=fname,
+                progress_callback=progress_callback,
+                cancel_event=cancel_event,
             )
             for c in res:
                 c["source_file"] = fname
@@ -342,6 +407,8 @@ def scan_reference_directory(
     f_skips: Optional[List[bool]] = None,
     step: int = 1,
     top_k: int = 5,
+    progress_callback: Optional[Callable[[Any], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> List[Dict[str, Any]]:
     """
     Scans all text files in reference directory across modes and f_skip settings.
@@ -349,21 +416,60 @@ def scan_reference_directory(
     if not os.path.exists(ref_dir):
         return []
 
+    emitter = TelemetryEmitter(progress_callback) if TelemetryEmitter and progress_callback else None
+    if emitter:
+        emitter.emit_calc(
+            stage="Running Key Directory Scan",
+            module="running_key",
+            formula="Decryption: c_i +/- k_i (mod 29); gatekeeper: score >= GATEKEEPER_THRESHOLD",
+            inputs={"ref_dir": ref_dir, "threshold": GATEKEEPER_THRESHOLD, "step": step, "modes": modes or ["sub", "add", "beaufort"]},
+            result=f"Scanning directory {ref_dir}",
+            verdict="INFO",
+        )
+
     all_candidates: List[Dict[str, Any]] = []
-    for fname in sorted(os.listdir(ref_dir)):
-        if fname.endswith(".txt"):
-            fpath = os.path.join(ref_dir, fname)
-            file_results = scan_reference_file(
-                cipher_indices=cipher_indices,
-                file_path=fpath,
-                modes=modes,
-                f_skips=f_skips,
-                step=step,
-                top_k=top_k,
+    files = [f for f in sorted(os.listdir(ref_dir)) if f.endswith(".txt")]
+    total_files = len(files)
+
+    for f_idx, fname in enumerate(files):
+        if cancel_event is not None and cancel_event.is_set():
+            if emitter:
+                emitter.emit_phase(1, 1, "Running Key Scan", PhaseStatus.CANCELLED, message="Scan cancelled")
+            break
+        if emitter:
+            emitter.emit_phase(
+                phase_id=1,
+                total_phases=1,
+                name="Running Key Directory Scan",
+                status=PhaseStatus.PROGRESS,
+                completed=f_idx,
+                total=total_files,
+                message=f"Scanning file {fname} ({f_idx+1}/{total_files})",
             )
-            all_candidates.extend(file_results)
+        fpath = os.path.join(ref_dir, fname)
+        file_results = scan_reference_file(
+            cipher_indices=cipher_indices,
+            file_path=fpath,
+            modes=modes,
+            f_skips=f_skips,
+            step=step,
+            top_k=top_k,
+            progress_callback=progress_callback,
+            cancel_event=cancel_event,
+        )
+        all_candidates.extend(file_results)
 
     all_candidates.sort(key=lambda x: -x["score"])
+    if emitter:
+        emitter.emit_phase(
+            phase_id=1,
+            total_phases=1,
+            name="Running Key Directory Scan",
+            status=PhaseStatus.COMPLETED,
+            completed=total_files,
+            total=total_files,
+            message="Scan complete",
+        )
     return all_candidates[:top_k]
 
 
@@ -391,7 +497,7 @@ def log_running_key_attempt_to_ledger(
     ).hexdigest()[:16]
 
     try:
-        from agents.ledger import log_canonical_attempt, log_attempt
+        from agents.ledger import log_canonical_attempt
         logged = log_canonical_attempt(
             page=page,
             method="running_key",
@@ -400,14 +506,6 @@ def log_running_key_attempt_to_ledger(
             score=score,
             passed=passed,
             result_preview=plaintext[:200],
-        )
-        log_attempt(
-            page=str(page),
-            method=f"running_key_{mode}",
-            key=f"{os.path.basename(source_text)}:off={offset}:f_skip={f_skip}",
-            result=plaintext[:200],
-            success=passed,
-            notes=f"score={score:.4f}, passed={passed}",
         )
         return logged
     except Exception:

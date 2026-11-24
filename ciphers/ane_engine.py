@@ -6,11 +6,19 @@ candidate plaintext likelihood evaluation, and latent space projection.
 Strictly offline and local — uses pre-existing cached models with zero network requests.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import logging
 from typing import List, Tuple, Dict, Any, Optional, Sequence
-import numpy as np
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    np = None
+    HAS_NUMPY = False
 
 logger = logging.getLogger("ane_engine")
 
@@ -80,6 +88,8 @@ def _init_ane_session():
 
 def is_ane_available() -> bool:
     """Check if Apple Neural Engine / CoreML acceleration is ready."""
+    if not HAS_NUMPY:
+        return False
     if not _ANE_INITIALIZED:
         _init_ane_session()
     return bool(_ANE_AVAILABLE and _ANE_SESSION is not None)
@@ -87,7 +97,7 @@ def is_ane_available() -> bool:
 
 def get_ane_device_info() -> Dict[str, Any]:
     """Retrieve metadata about the Apple Neural Engine subsystem."""
-    if not _ANE_INITIALIZED:
+    if HAS_NUMPY and not _ANE_INITIALIZED:
         _init_ane_session()
     
     import platform
@@ -111,11 +121,16 @@ def get_ane_device_info() -> Dict[str, Any]:
     }
 
 
-def compute_ane_embeddings(texts: Sequence[str], batch_size: int = 32) -> np.ndarray:
+def compute_ane_embeddings(texts: Sequence[str], batch_size: int = 32) -> Any:
     """
     Compute normalized 384-dimensional dense semantic embeddings using the Apple Neural Engine.
     Falls back to zero or CPU embeddings if ANE is not configured.
     """
+    if not HAS_NUMPY:
+        if not texts:
+            return []
+        return [[0.0] * 384 for _ in texts]
+
     if not texts:
         return np.zeros((0, 384), dtype=np.float32)
 

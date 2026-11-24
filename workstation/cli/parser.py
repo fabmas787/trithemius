@@ -11,6 +11,60 @@ from config import SUPPORTED_PROVIDERS
 from workstation.core.workstation import TerminalWorkstation, CORPUS_DIR, DB_DIR
 from workstation.ui.json_renderer import JsonRenderer
 
+
+def _positive_int(value: str) -> int:
+    """Parse a strictly positive integer (> 0) for CLI flags."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid positive integer value: {value!r}")
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"expected positive integer (> 0), got {value!r}")
+    return ivalue
+
+
+def _validate_skip_indices(value: str) -> str:
+    """Validate comma-separated integer tokens for --skip-indices."""
+    tokens = [tok.strip() for tok in value.split(",")]
+    if not tokens or any(tok == "" for tok in tokens):
+        raise argparse.ArgumentTypeError(
+            f"invalid --skip-indices value: {value!r} (expected comma-separated integers)"
+        )
+    for tok in tokens:
+        try:
+            int(tok)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"invalid integer {tok!r} in --skip-indices"
+            )
+    return value
+
+
+def _parse_skip_indices(
+    raw: Optional[str],
+    parser: Optional[argparse.ArgumentParser] = None,
+) -> Optional[set]:
+    """Parse comma-separated skip indices, calling parser.error on invalid tokens."""
+    if raw is None:
+        return None
+    tokens = [tok.strip() for tok in raw.split(",")]
+    if not tokens or any(tok == "" for tok in tokens):
+        msg = f"invalid --skip-indices value: {raw!r} (expected comma-separated integers)"
+        if parser is not None:
+            parser.error(msg)
+        raise ValueError(msg)
+    skips = set()
+    for tok in tokens:
+        try:
+            skips.add(int(tok))
+        except ValueError:
+            msg = f"invalid integer {tok!r} in --skip-indices"
+            if parser is not None:
+                parser.error(msg)
+            raise ValueError(msg)
+    return skips
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Trithemius Liber Primus Cryptanalytic Workstation")
     parser.add_argument("--model", type=str, default="", help="Model key or custom model name")
@@ -22,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--think", action="store_true", default=None, help="Enable Chain-of-Thought reasoning")
     parser.add_argument("--boost", action="store_true", default=None, help="Enable Deep Cryptanalytic Retrieval and Reranking Boost mode")
     parser.add_argument("--json", action="store_true", help="Format CLI output as machine-readable JSON")
+    parser.add_argument(
+        "--tui",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable interactive Textual TUI dashboard",
+    )
 
     subparsers = parser.add_subparsers(dest="subcommand", help="Direct CLI subcommand")
 
@@ -58,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_vig.add_argument("text", type=str, help="Plaintext, ciphertext, filepath, or corpus page number")
     p_vig.add_argument("key", type=str, help="Key string or runes")
     p_vig.add_argument("--f-skip", action="store_true", help="Enable cleartext Fehu keystream pause")
-    p_vig.add_argument("--skip-indices", type=str, default=None, help="Comma-separated explicit skip indices")
+    p_vig.add_argument("--skip-indices", type=_validate_skip_indices, default=None, help="Comma-separated explicit skip indices")
 
     # totient-stream subcommand
     p_tot = subparsers.add_parser("totient-stream", help="Liber Primus Prime Totient Stream Cipher (phi(p) = p - 1)")
@@ -66,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_tot.add_argument("text", type=str, help="Plaintext, ciphertext, filepath, or corpus page number")
     p_tot.add_argument("--offset", type=int, default=0, help="Prime sequence offset (default: 0)")
     p_tot.add_argument("--f-skip", action="store_true", help="Enable cleartext Fehu keystream pause (skip index 56)")
-    p_tot.add_argument("--skip-indices", type=str, default=None, help="Comma-separated explicit skip indices")
+    p_tot.add_argument("--skip-indices", type=_validate_skip_indices, default=None, help="Comma-separated explicit skip indices")
 
     # totient subcommand (alias for totient-stream)
     p_tot2 = subparsers.add_parser("totient", help="Liber Primus Prime Totient Stream Cipher (phi(p) = p - 1)")
@@ -74,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_tot2.add_argument("text", type=str, help="Plaintext, ciphertext, filepath, or corpus page number")
     p_tot2.add_argument("--offset", type=int, default=0, help="Prime sequence offset (default: 0)")
     p_tot2.add_argument("--f-skip", action="store_true", help="Enable cleartext Fehu keystream pause (skip index 56)")
-    p_tot2.add_argument("--skip-indices", type=str, default=None, help="Comma-separated explicit skip indices")
+    p_tot2.add_argument("--skip-indices", type=_validate_skip_indices, default=None, help="Comma-separated explicit skip indices")
 
     # solve subcommand
     p_slv = subparsers.add_parser("solve", help="Solve and verify canonical Liber Primus solved pages")
@@ -84,6 +144,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_crk = subparsers.add_parser("crack", help="Liber Primus GF(29) Cryptanalytic Cascade Solver")
     p_crk.add_argument("text", type=str, help="Ciphertext, filepath, or corpus page number")
     p_crk.add_argument("--deep", action="store_true", help="Enable deep search (affine mod 29, autokey, cross-page)")
+    p_crk.add_argument("--compound", action="store_true", help="Sweep exhaustive compound multi-word phrases on Metal GPU")
+    p_crk.add_argument("--randomize", "--random", dest="randomize", action="store_true", help="Randomize candidate vocabulary selection from corpus lexicon")
+    p_crk.add_argument("--rotations", action="store_true", help="Evaluate all cyclic phase rotations for dictionary keywords")
+    p_crk.add_argument("--crib-limit", type=_positive_int, default=None, help="Maximum number of crib candidates to evaluate")
+    p_crk.add_argument("--top-k", type=_positive_int, default=5, help="Number of top candidate decryptions to display (default: 5)")
+    p_crk.add_argument("--no-metal", action="store_true", help="Disable Apple Silicon Metal GPU acceleration")
+    p_crk.add_argument("--no-ane", action="store_true", help="Disable Apple Neural Engine semantic reranking")
+    p_crk.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Format CLI output as machine-readable JSON")
 
     # triage subcommand
     p_trg = subparsers.add_parser("triage", help="Statistical triage & cipher classification")
@@ -128,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     # status subcommand
     p_status = subparsers.add_parser("status", help="Display system telemetry and corpus health")
     p_status.add_argument("--probe", "-p", action="store_true", help="Probe configured providers and models")
-    p_status.add_argument("--json", action="store_true", help="Format CLI output as machine-readable JSON")
+    p_status.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Format CLI output as machine-readable JSON")
 
     # running-key subcommand
     p_rk = subparsers.add_parser("running-key", help="GF(29) running-key decryption against reference text")
@@ -174,7 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # think subcommand
     p_thk = subparsers.add_parser("think", help="Toggle Chain-of-Thought")
-    p_thk.add_argument("state", nargs="?", default=None, choices=["on", "off", "toggle"])
+    p_thk.add_argument("state", nargs="?", default=None, type=lambda s: s.strip().lower(), choices=["on", "off", "toggle"])
 
     # provider subcommand
     p_prov = subparsers.add_parser("provider", help="Switch active provider")
@@ -196,13 +264,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_cch = subparsers.add_parser("cache", help="Manage RAG cache")
     p_cch.add_argument("action", nargs="?", default="clear")
 
+    # explain subcommand
+    subparsers.add_parser("explain", help="Inspect mathematical calculation trace from last operation")
+    subparsers.add_parser("trace", help="Alias for 'explain'")
+
     return parser
 
 
 def cli_dispatch(parsed_args: argparse.Namespace, ws: TerminalWorkstation, parser: Optional[argparse.ArgumentParser] = None):
+    tui_mode = getattr(parsed_args, "tui", None)
+    if parsed_args.subcommand is not None and tui_mode is True:
+        sys.stderr.write("[!] Warning: --tui ignored for direct CLI subcommand. Executing headless.\n")
+    if getattr(parsed_args, "json", False) and tui_mode is True:
+        sys.stderr.write("[!] Warning: --tui ignored when --json is specified. Executing headless.\n")
+
     if parsed_args.subcommand is None:
-        # Launch interactive REPL
-        ws.repl()
+        if getattr(parsed_args, "json", False):
+            ws.ui.print_json({"status": "ready", "model": ws.active_model})
+            return 0
+        # Launch interactive REPL / TUI
+        ws.repl(ui_mode=tui_mode)
     elif parsed_args.subcommand == "boost":
         ws.run_boost(parsed_args.state)
     elif parsed_args.subcommand == "help":
@@ -226,28 +307,14 @@ def cli_dispatch(parsed_args: argparse.Namespace, ws: TerminalWorkstation, parse
         res = ws.run_atbash(parsed_args.text, shift=parsed_args.shift)
         ws.print_atbash(res)
     elif parsed_args.subcommand == "vigenere":
-        skips = None
-        if parsed_args.skip_indices:
-            skips = set()
-            for x in parsed_args.skip_indices.split(","):
-                try:
-                    skips.add(int(x.strip()))
-                except ValueError:
-                    pass
+        skips = _parse_skip_indices(parsed_args.skip_indices, parser=parser)
         res = ws.run_vigenere(
             parsed_args.mode, parsed_args.text, parsed_args.key,
             f_skip=parsed_args.f_skip, skip_indices=skips
         )
         ws.print_vigenere(res)
     elif parsed_args.subcommand in ("totient-stream", "totient"):
-        skips = None
-        if parsed_args.skip_indices:
-            skips = set()
-            for x in parsed_args.skip_indices.split(","):
-                try:
-                    skips.add(int(x.strip()))
-                except ValueError:
-                    pass
+        skips = _parse_skip_indices(parsed_args.skip_indices, parser=parser)
         res = ws.run_totient_stream(
             parsed_args.mode, parsed_args.text,
             offset=parsed_args.offset,
@@ -259,7 +326,17 @@ def cli_dispatch(parsed_args: argparse.Namespace, ws: TerminalWorkstation, parse
         res = ws.run_solve(parsed_args.target)
         ws.print_solve(res)
     elif parsed_args.subcommand == "crack":
-        res = ws.run_crack(parsed_args.text, deep=parsed_args.deep)
+        res = ws.run_crack(
+            parsed_args.text,
+            deep=parsed_args.deep,
+            compound=parsed_args.compound,
+            randomize=parsed_args.randomize,
+            include_rotations=parsed_args.rotations,
+            crib_limit=parsed_args.crib_limit,
+            top_k=parsed_args.top_k,
+            use_metal=not parsed_args.no_metal,
+            use_ane=not parsed_args.no_ane,
+        )
         ws.print_crack(res)
     elif parsed_args.subcommand == "triage":
         res = ws.run_triage(parsed_args.text)
@@ -347,6 +424,12 @@ def cli_dispatch(parsed_args: argparse.Namespace, ws: TerminalWorkstation, parse
         c = ws.run_cache(parsed_args.action)
         if getattr(parsed_args, "json", False):
             ws.ui.print_json({"cache_action": parsed_args.action, "success": c})
+    elif parsed_args.subcommand in ("explain", "trace"):
+        steps = ws.run_explain()
+        if getattr(parsed_args, "json", False):
+            ws.ui.print_json({"calc_steps": steps})
+        else:
+            ws.print_explain(steps)
 
 
 def main(args=None):

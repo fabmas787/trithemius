@@ -93,11 +93,11 @@ echo ======================================================================
 echo                    SETUP COMPLETED SUCCESSFULLY!
 echo ======================================================================
 echo.
-echo To start the Trithemius Workstation GUI, double click:
+echo To start the Trithemius Terminal Workstation, double click:
 echo   start.bat
 echo.
 echo Or run in terminal:
 echo   venv\Scripts\activate
-echo   python gui\server.py
+echo   python trithemius.py
 echo.
 pause

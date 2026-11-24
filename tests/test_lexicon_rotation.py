@@ -1,4 +1,9 @@
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
+
+import agents.ledger as ledger
 from ciphers.lexicon import (
     generate_cyclic_rotations,
     generate_all_key_variants,
@@ -11,6 +16,43 @@ from trithemius import TerminalWorkstation
 
 
 class TestLexiconRotationAndRandomization(unittest.TestCase):
+    def setUp(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        db_path = os.path.join(tmp_dir.name, "ledger.sqlite3")
+        vector_dir = os.path.join(tmp_dir.name, "vectordb")
+        os.makedirs(vector_dir, exist_ok=True)
+
+        orig_db = ledger.DB_PATH
+        orig_vec = ledger.VECTOR_DIR
+        saved_defaults = []
+        for name in dir(ledger):
+            fn = getattr(ledger, name)
+            if callable(fn) and getattr(fn, "__defaults__", None):
+                defs = fn.__defaults__
+                if orig_db in defs or orig_vec in defs:
+                    saved_defaults.append((fn, defs))
+                    fn.__defaults__ = tuple(
+                        db_path if d == orig_db else (vector_dir if d == orig_vec else d)
+                        for d in defs
+                    )
+
+        ledger._VECTOR_CLIENT = None
+        ledger._VECTOR_COLLECTION = None
+        p_db = patch.object(ledger, "DB_PATH", db_path)
+        p_vec = patch.object(ledger, "VECTOR_DIR", vector_dir)
+        p_db.start()
+        p_vec.start()
+
+        def _cleanup_ledger():
+            ledger._VECTOR_CLIENT = None
+            ledger._VECTOR_COLLECTION = None
+            for fn, defs in saved_defaults:
+                fn.__defaults__ = defs
+
+        self.addCleanup(p_db.stop)
+        self.addCleanup(p_vec.stop)
+        self.addCleanup(_cleanup_ledger)
     def test_generate_cyclic_rotations(self):
         # For an 8-letter word like DIVINITY
         shifts = [3, 8, 21, 8, 13, 8, 19, 24]  # arbitrary shifts length 8

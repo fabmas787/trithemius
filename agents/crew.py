@@ -8,6 +8,7 @@ Usage:
 
 import sys
 import os
+from typing import Optional, Any
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
@@ -16,14 +17,17 @@ if BASE_DIR not in sys.path:
 try:
     from crewai import Agent, Task, Crew, Process, LLM
     from crewai.tools import tool
-    CREWAI_AVAILABLE = True
+    HAS_CREWAI = True
 except ImportError:
-    CREWAI_AVAILABLE = False
+    HAS_CREWAI = False
     Agent = Task = Crew = Process = LLM = None
+
     def tool(name=None):
         def decorator(fn):
             return fn
         return decorator
+
+CREWAI_AVAILABLE = HAS_CREWAI
 
 try:
     from ciphers.agrippa import (
@@ -49,18 +53,35 @@ except ImportError:
     )
     from al_kindi import ngram_score, rank_candidates, is_plausible_english, chi_squared_score
     from ledger import log_attempt, has_been_tried, summary as ledger_summary
-from config import CREWAI_MODEL_NAME, ACTIVE_PROVIDER, OLLAMA_HOST, get_api_key
 
-local_llm = None
-if CREWAI_AVAILABLE:
-    if ACTIVE_PROVIDER == "ollama":
-        local_llm = LLM(model=CREWAI_MODEL_NAME, base_url=OLLAMA_HOST)
-    else:
-        api_key = get_api_key(ACTIVE_PROVIDER)
-        local_llm = LLM(model=CREWAI_MODEL_NAME, api_key=api_key) if api_key else LLM(model=CREWAI_MODEL_NAME)
+import config
 
 
 # --- Cryptanalytic Tools for Agents ---
+
+@tool("Search Liber Primus Corpus")
+def corpus_retrieve_tool(query: str) -> str:
+    """Retrieve relevant passages from the local Liber Primus corpus via hybrid vector/BM25 search."""
+    try:
+        from scripts.ask import get_collection, retrieve
+        try:
+            collection = get_collection()
+        except Exception:
+            collection = None
+        results = retrieve(collection, query, k=5)
+        if not results:
+            return "No matching passages found in the local corpus."
+        blocks = []
+        for idx, (doc, meta) in enumerate(results, 1):
+            meta = meta or {}
+            src = meta.get("source", "unknown")
+            page = meta.get("page", "general")
+            snippet = (doc or "").strip()[:600]
+            blocks.append(f"[{idx}] Source: {src} | Page: {page}\n{snippet}")
+        return "\n\n".join(blocks)
+    except Exception as e:
+        return f"Corpus retrieval error: {e}"
+
 
 @tool("Decode Runes to Latin")
 def decode_runes_tool(rune_string: str) -> str:
@@ -139,76 +160,73 @@ def ledger_check_tool(page: str, method: str, key: str = "") -> str:
     return f"Already tried: {tried}" if tried else "Not yet tried — safe to attempt."
 
 
-# --- Agents Configuration ---
-
-bodleian = Agent(
-    role="Corpus Librarian",
-    goal="Retrieve relevant passages from the local research corpus. Never speculate "
-         "or offer opinions on whether a decryption is correct — only supply raw material.",
-    backstory="Named for Thomas Bodley, founder of the Bodleian Library. Meticulous, "
-              "neutral, and allergic to speculation.",
-    llm=local_llm,
-    verbose=True,
-)
-
-bacon = Agent(
-    role="Web Researcher",
-    goal="Find and summarize current, relevant information from the web about Cicada "
-         "3301 and Liber Primus. Never fabricate sources.",
-    backstory="Named for Roger Bacon, medieval empiricist. Trusts observation over authority.",
-    llm=local_llm,
-    verbose=True,
-)
-
-cryptanalyst = Agent(
-    role="Cryptanalyst",
-    goal="Apply cryptographic techniques (Gematria Primus, Vigenere mod-29, rune Atbash, "
-         "Euler totients, frequency scoring) using tools rather than guessing.",
-    backstory="Embodies Agrippa (gematria & sacred math), Kasiski (Vigenere & key analysis), "
-              "and Al-Kindi (frequency & statistical analysis) as one master cryptanalyst.",
-    tools=[
-        decode_runes_tool, gematria_sum_tool, rune_vigenere_tool,
-        rune_atbash_tool, sacred_math_tool, key_length_tool, plausibility_tool
-    ],
-    llm=local_llm,
-    verbose=True,
-)
-
-archivist = Agent(
-    role="Hypothesis Archivist",
-    goal="Check the ledger before any attempt is proposed, and ensure nothing already "
-         "tried and failed gets re-suggested.",
-    backstory="Keeps the lab notebook. Has no patience for repeated dead ends.",
-    tools=[ledger_check_tool],
-    llm=local_llm,
-    verbose=True,
-)
-
-trithemius = Agent(
-    role="Lead Orchestrator",
-    goal="Coordinate the team, synthesize findings into a clear, mathematically sound "
-         "final answer, and flag genuine uncertainty rather than overclaiming progress.",
-    backstory="Named for Johannes Trithemius, father of Western cryptography. Rigorous, "
-              "skeptical of unverified decryptions, allergic to false positives.",
-    llm=local_llm,
-    verbose=True,
-)
+def _create_runtime_llm() -> Any:
+    """Instantiate CrewAI LLM from current runtime configuration."""
+    provider = config.ACTIVE_PROVIDER
+    model_name = config.CREWAI_MODEL_NAME
+    if provider == "ollama":
+        return LLM(model=model_name, base_url=config.OLLAMA_HOST)
+    api_key = config.get_api_key(provider)
+    return LLM(model=model_name, api_key=api_key) if api_key else LLM(model=model_name)
 
 
 def build_crew(task_description: str) -> Optional[Any]:
-    if not CREWAI_AVAILABLE:
+    """Assemble and return the multi-agent Crew for Liber Primus analysis."""
+    if not HAS_CREWAI:
         print("[!] CrewAI is not installed. Multi-agent crew functionality is unavailable.")
         return None
+
+    runtime_llm = _create_runtime_llm()
+
+    bodleian = Agent(
+        role="Corpus Librarian",
+        goal="Retrieve relevant passages from the local research corpus. Never speculate "
+             "or offer opinions on whether a decryption is correct — only supply raw material.",
+        backstory="Named for Thomas Bodley, founder of the Bodleian Library. Meticulous, "
+                  "neutral, and allergic to speculation.",
+        tools=[corpus_retrieve_tool],
+        llm=runtime_llm,
+        verbose=True,
+    )
+
+    cryptanalyst = Agent(
+        role="Cryptanalyst",
+        goal="Apply cryptographic techniques (Gematria Primus, Vigenere mod-29, rune Atbash, "
+             "Euler totients, frequency scoring) using tools rather than guessing.",
+        backstory="Embodies Agrippa (gematria & sacred math), Kasiski (Vigenere & key analysis), "
+                  "and Al-Kindi (frequency & statistical analysis) as one master cryptanalyst.",
+        tools=[
+            decode_runes_tool, gematria_sum_tool, rune_vigenere_tool,
+            rune_atbash_tool, sacred_math_tool, key_length_tool, plausibility_tool
+        ],
+        llm=runtime_llm,
+        verbose=True,
+    )
+
+    archivist = Agent(
+        role="Hypothesis Archivist",
+        goal="Check the ledger before any attempt is proposed, and ensure nothing already "
+             "tried and failed gets re-suggested.",
+        backstory="Keeps the lab notebook. Has no patience for repeated dead ends.",
+        tools=[ledger_check_tool],
+        llm=runtime_llm,
+        verbose=True,
+    )
+
+    trithemius = Agent(
+        role="Lead Orchestrator",
+        goal="Coordinate the team, synthesize findings into a clear, mathematically sound "
+             "final answer, and flag genuine uncertainty rather than overclaiming progress.",
+        backstory="Named for Johannes Trithemius, father of Western cryptography. Rigorous, "
+                  "skeptical of unverified decryptions, allergic to false positives.",
+        llm=runtime_llm,
+        verbose=True,
+    )
+
     research_task = Task(
         description=f"Gather relevant background for: {task_description}",
         expected_output="A concise summary of relevant corpus material.",
         agent=bodleian,
-    )
-
-    web_task = Task(
-        description=f"Search for live updates or known solvers' consensus on: {task_description}",
-        expected_output="A summary of live web findings or note 'nothing new'.",
-        agent=bacon,
     )
 
     ledger_task = Task(
@@ -223,7 +241,7 @@ def build_crew(task_description: str) -> Optional[Any]:
                      "to test hypotheses quantitatively.",
         expected_output="Decryption candidates found with statistical scores and exact methods used.",
         agent=cryptanalyst,
-        context=[research_task, web_task, ledger_task],
+        context=[research_task, ledger_task],
     )
 
     synthesis_task = Task(
@@ -232,12 +250,12 @@ def build_crew(task_description: str) -> Optional[Any]:
                     "adversarial verification.",
         expected_output="A final research assessment with clear next steps.",
         agent=trithemius,
-        context=[research_task, web_task, ledger_task, crypto_task],
+        context=[research_task, ledger_task, crypto_task],
     )
 
     return Crew(
-        agents=[bodleian, bacon, archivist, cryptanalyst, trithemius],
-        tasks=[research_task, web_task, ledger_task, crypto_task, synthesis_task],
+        agents=[bodleian, archivist, cryptanalyst, trithemius],
+        tasks=[research_task, ledger_task, crypto_task, synthesis_task],
         process=Process.sequential,
         verbose=True,
     )

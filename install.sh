@@ -105,18 +105,8 @@ source "$VENV_DIR/bin/activate"
 echo -e "\n${CYAN}[4/5] Installing Python dependencies...${NC}"
 pip install --upgrade pip --quiet
 
-# Install core dependencies first
-echo -e "  Installing core dependencies (ChromaDB, Ollama, Requests, BeautifulSoup4)..."
-pip install chromadb>=0.4.0 ollama>=0.3.0 requests>=2.28.0 beautifulsoup4>=4.12.0
-
-# Install CrewAI agents (handles optional failure gracefully if user overrides python)
-echo -e "  Installing multi-agent dependencies (CrewAI)..."
-if pip install crewai>=0.80.0 crewai-tools>=0.14.0; then
-    echo -e "  ${GREEN}✓ CrewAI multi-agent dependencies installed.${NC}"
-else
-    echo -e "  ${YELLOW}! CrewAI could not be installed on this specific Python build.${NC}"
-    echo -e "    (Note: RAG Assistant, Workstation GUI, Gematria & Walsingham scraper will still run perfectly!)${NC}"
-fi
+echo -e "  Installing dependencies from requirements.txt..."
+pip install -r "$SCRIPT_DIR/requirements.txt"
 
 echo -e "  ${GREEN}✓ Dependencies check completed.${NC}"
 

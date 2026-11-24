@@ -10,7 +10,7 @@ Clean modular orchestrator composing domain services:
 
 import os
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if BASE_DIR not in sys.path:
@@ -95,6 +95,7 @@ class TerminalWorkstation:
                 os.environ["TRITHEMIUS_BOOST"] = "on"
 
         self.ui = renderer if renderer is not None else ConsoleRenderer()
+        self.last_calc_steps: List[Dict[str, Any]] = []
 
         # Domain Services Composition
         self.ciphers = CipherService(self)
@@ -121,9 +122,9 @@ class TerminalWorkstation:
             return getattr(self.ui, name)
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def repl(self) -> None:
+    def repl(self, ui_mode: Optional[bool] = None) -> None:
         from workstation.ui.repl import run_repl
-        return run_repl(self)
+        return run_repl(self, ui_mode=ui_mode)
 
     # -------------------------------------------------------------------------
     # Cryptanalytic Operations (Delegated to CipherService)
@@ -173,8 +174,10 @@ class TerminalWorkstation:
         compound: bool = False,
         use_metal: bool = True,
         use_ane: bool = True,
+        progress_callback: Optional[Callable[[Any], None]] = None,
+        cancel_event: Optional[Any] = None,
     ) -> CrackResult:
-        return self.ciphers.run_crack(
+        res = self.ciphers.run_crack(
             target,
             deep=deep,
             top_k=top_k,
@@ -185,7 +188,12 @@ class TerminalWorkstation:
             compound=compound,
             use_metal=use_metal,
             use_ane=use_ane,
+            progress_callback=progress_callback,
+            cancel_event=cancel_event,
         )
+        if isinstance(res, dict) and "calc_steps" in res:
+            self.last_calc_steps = res.get("calc_steps", [])
+        return res
 
     def run_triage(self, target: str) -> TriageResult:
         return self.ciphers.run_triage(target)
@@ -212,8 +220,20 @@ class TerminalWorkstation:
         ref_dir: Optional[str] = None,
         step: int = 1,
         top_k: int = 5,
+        progress_callback: Optional[Callable[[Any], None]] = None,
+        cancel_event: Optional[Any] = None,
     ) -> RunningKeyScanResult:
-        return self.ciphers.run_running_key_scan(page_target, ref_dir=ref_dir, step=step, top_k=top_k)
+        return self.ciphers.run_running_key_scan(
+            page_target,
+            ref_dir=ref_dir,
+            step=step,
+            top_k=top_k,
+            progress_callback=progress_callback,
+            cancel_event=cancel_event,
+        )
+
+    def run_explain(self) -> List[Dict[str, Any]]:
+        return getattr(self, "last_calc_steps", [])
 
     def run_lexicon(self, action: str = "phrases", limit: int = 50) -> LexiconResult:
         return self.ciphers.run_lexicon(action=action, limit=limit)

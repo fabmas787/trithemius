@@ -295,17 +295,37 @@ def log_attempt(page: str, method: str, key: str = None, result: str = None,
 
 def has_been_tried(page: str, method: str, key: str = None, db_path: str = DB_PATH) -> bool:
     conn = _connect(db_path)
+    c_page = canonical_page(page)
+    c_method = method.strip().lower()
+    prefix = f"{c_method}:"
+    prefix_len = len(prefix)
     if key is not None:
         cur = conn.execute(
             "SELECT 1 FROM attempts WHERE page=? AND method=? AND key=? LIMIT 1",
             (page, method, key),
         )
+        found = cur.fetchone() is not None
+        if not found:
+            c_word = str(key).strip().upper()
+            cur = conn.execute(
+                "SELECT 1 FROM canonical_attempts "
+                "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) AND word=? LIMIT 1",
+                (c_page, c_method, prefix_len, prefix, c_word),
+            )
+            found = cur.fetchone() is not None
     else:
         cur = conn.execute(
             "SELECT 1 FROM attempts WHERE page=? AND method=? LIMIT 1",
             (page, method),
         )
-    found = cur.fetchone() is not None
+        found = cur.fetchone() is not None
+        if not found:
+            cur = conn.execute(
+                "SELECT 1 FROM canonical_attempts "
+                "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) LIMIT 1",
+                (c_page, c_method, prefix_len, prefix),
+            )
+            found = cur.fetchone() is not None
     conn.close()
     return found
 

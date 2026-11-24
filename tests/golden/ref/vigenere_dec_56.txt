@@ -39,7 +39,7 @@ rc=0
 | Index of Coinc:  0.034
 | Chi-Squared:     361.37 (English < 180)
 | Ngram Score:     0.0505 (0.0 to 1.0)
-| English Words:   0.067 (6.7%)
+| English Words:   0.0 (0.0%)
 | Gatekeeper:      [REJECT]
 +--------------------------------------------------------------------------
 

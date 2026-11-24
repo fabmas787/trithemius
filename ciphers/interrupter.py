@@ -133,7 +133,8 @@ def canonical_key_shifts(key: Union[str, List[int]]) -> List[int]:
     Maps Latin characters to canonical Futhorc runes via agrippa.latin_to_rune.
     """
     if isinstance(key, (list, tuple)):
-        return [int(k) % 29 for k in key]
+        shifts = [int(k) % 29 for k in key]
+        return shifts if shifts else [0]
 
     shifts: List[int] = []
     has_runes = any(c in INDEX_BY_RUNE for c in key)

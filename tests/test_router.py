@@ -183,6 +183,21 @@ class TestRouterExecution(unittest.TestCase):
         out = router.execute_deterministic(route)
         self.assertIn("Input length exceeds maximum bound of 10,000 characters", out)
 
+    def test_oversized_integer_and_leading_zero_normalization(self):
+        res_overflow = router.classify_query("is " + "9" * 5000 + " prime?")
+        self.assertEqual(res_overflow["mode"], "deterministic")
+        self.assertEqual(res_overflow["action"], "prime_check")
+        self.assertGreater(res_overflow["params"]["number"], router.MAX_OPERAND)
+        out_overflow = router.execute_deterministic(res_overflow)
+        self.assertIn("Operand exceeds deterministic calculation bound of 10^12", out_overflow)
+
+        res_zeros = router.classify_query("is 0000000000000007 prime?")
+        self.assertEqual(res_zeros["mode"], "deterministic")
+        self.assertEqual(res_zeros["action"], "prime_check")
+        self.assertEqual(res_zeros["params"]["number"], 7)
+        out_zeros = router.execute_deterministic(res_zeros)
+        self.assertIn("7 is a PRIME number", out_zeros)
+
 
 class TestRouterFeatureFlag(unittest.TestCase):
     def test_router_off_flag(self):

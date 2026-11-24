@@ -41,6 +41,20 @@ def max_periodic_key_length(n_symbols: int, language_entropy_bits: float, n: int
     return (n_symbols * d) / math.log2(n)
 
 
+def max_unconstrained_periodic_key_length(
+    n_symbols: int,
+    min_runes_per_col: int = 16,
+    hard_cap: int = 16,
+) -> int:
+    """
+    Maximum periodic key length resolvable by unconstrained per-column/bigram solvers,
+    requiring at least min_runes_per_col symbols per column and capped by hard_cap.
+    """
+    if n_symbols <= 0:
+        return 1
+    return min(hard_cap, max(1, n_symbols // max(1, min_runes_per_col)))
+
+
 def identifiability_report(
     n_symbols: int,
     assumed_entropies: Optional[Dict[str, float]] = None,
@@ -76,5 +90,6 @@ def identifiability_report(
         "n_symbols": n_symbols,
         "alphabet_size": n,
         "max_symbol_entropy_bits": alphabet_entropy,
+        "max_unconstrained_periodic_key_len": max_unconstrained_periodic_key_length(n_symbols),
         "scenarios": scenarios,
     }

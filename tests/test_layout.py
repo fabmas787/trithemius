@@ -25,7 +25,7 @@ from ciphers.layout import (
     analyze_all_features,
     calibrate_solved_pages,
 )
-from agents.ledger import count_attempts
+from agents.ledger import count_attempts, has_been_tried
 
 
 class TestLayoutStreamExtraction(unittest.TestCase):
@@ -175,9 +175,10 @@ class TestSolvedPagesCalibration(unittest.TestCase):
             self.assertEqual(calib["total_evaluations"], 20)
             self.assertEqual(len(calib["pages"]), 4)
 
-            # Check ledger persistence
+            # Check ledger persistence without double-counting legacy attempts table
             logged_attempts = count_attempts("layout-carrier", db_path=db_path)
-            self.assertGreater(logged_attempts, 0)
+            self.assertEqual(logged_attempts, 20)
+            self.assertTrue(has_been_tried("0", "layout-carrier", db_path=db_path))
 
             # Verify reproducibility with fixed seed
             calib2 = calibrate_solved_pages(db_path=db_path, seed=42, log_to_ledger=False)

@@ -3,6 +3,8 @@ import math
 import shutil
 import tempfile
 import os
+from unittest.mock import patch
+import agents.ledger as ledger
 from agents.ledger import (
     deterministic_embed,
     record_attempt,
@@ -22,9 +24,40 @@ from trithemius import TerminalWorkstation
 class TestVectorAttemptsTracking(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp(prefix="trithemius_test_vec_")
+        self.addCleanup(lambda: shutil.rmtree(self.test_dir, ignore_errors=True))
+        db_path = os.path.join(self.test_dir, "ledger.sqlite3")
+        orig_db = ledger.DB_PATH
+        orig_vec = ledger.VECTOR_DIR
+        saved_defaults = []
+        for name in dir(ledger):
+            fn = getattr(ledger, name)
+            if callable(fn) and getattr(fn, "__defaults__", None):
+                defs = fn.__defaults__
+                if orig_db in defs or orig_vec in defs:
+                    saved_defaults.append((fn, defs))
+                    fn.__defaults__ = tuple(
+                        db_path if d == orig_db else (self.test_dir if d == orig_vec else d)
+                        for d in defs
+                    )
+        ledger._VECTOR_CLIENT = None
+        ledger._VECTOR_COLLECTION = None
+        p_db = patch.object(ledger, "DB_PATH", db_path)
+        p_vec = patch.object(ledger, "VECTOR_DIR", self.test_dir)
+        p_db.start()
+        p_vec.start()
+
+        def _cleanup_ledger():
+            ledger._VECTOR_CLIENT = None
+            ledger._VECTOR_COLLECTION = None
+            for fn, defs in saved_defaults:
+                fn.__defaults__ = defs
+
+        self.addCleanup(p_db.stop)
+        self.addCleanup(p_vec.stop)
+        self.addCleanup(_cleanup_ledger)
 
     def tearDown(self):
-        shutil.rmtree(self.test_dir, ignore_errors=True)
+        pass
 
     def test_deterministic_embed_geometry(self):
         v1 = deterministic_embed("DIVINITY", dim=768)

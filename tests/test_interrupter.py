@@ -161,6 +161,14 @@ class TestDynamicInterrupterEngine(unittest.TestCase):
         latin = decode_runes(dec)
         self.assertEqual(latin, "WELCOME")
 
+    def test_empty_key_decode_no_zero_division(self):
+        """Empty list, tuple, or string key must return cleanly without ZeroDivisionError."""
+        self.assertEqual(rune_vigenere_decode("ᚹᛖᛚ", []), "ᚹᛖᛚ")
+        self.assertEqual(rune_vigenere_decode("ᚹᛖᛚ", ()), "ᚹᛖᛚ")
+        self.assertEqual(rune_vigenere_decode("ᚹᛖᛚ", ""), "ᚹᛖᛚ")
+        self.assertEqual(canonical_key_shifts(""), [0])
+        self.assertEqual(canonical_key_shifts([]), [0])
+
 
 if __name__ == "__main__":
     unittest.main()

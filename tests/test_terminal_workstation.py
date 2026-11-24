@@ -6,6 +6,7 @@ Verifies all unified terminal capabilities, CLI dispatchers, and cipher optimiza
 import io
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -98,7 +99,24 @@ class TestTerminalWorkstationOpsec(unittest.TestCase):
         self.assertGreater(res["features"]["entropy"], 5.0)
 
     def test_opsec_with_official_cicada_pgp(self):
-        signed_text = (
+        import base64
+        import hashlib
+        from ciphers.zimmermann import crc24, _HASHES
+
+        self.assertEqual(
+            opsec.CICADA_PRIMARY_FINGERPRINT,
+            "6D854CD7933322A601C3286D181F01E57A35090F",
+        )
+
+        # 1. Plain non-PGP text -> NO_PGP_BLOCK
+        plain_res = self.ws.run_opsec("Just plain text without any PGP signature.")
+        self.assertFalse(plain_res["pgp"]["has_pgp_block"])
+        self.assertFalse(plain_res["pgp"]["is_official_key"])
+        self.assertFalse(plain_res["pgp"]["cryptographically_verified"])
+        self.assertEqual(plain_res["pgp"]["verdict"], "NO_PGP_BLOCK")
+
+        # 2. Unverified dummy 7A35090F block -> UNVERIFIED_KEY_ID_REFERENCED
+        dummy_signed = (
             "-----BEGIN PGP SIGNED MESSAGE-----\n"
             "Hash: SHA512\n\n"
             "Beware false paths. Always verify the signature from 7A35090F.\n"
@@ -107,11 +125,86 @@ class TestTerminalWorkstationOpsec(unittest.TestCase):
             "iQIcBAEBCgAGBQJP7...\n"
             "-----END PGP SIGNATURE-----"
         )
-        res = self.ws.run_opsec(signed_text)
-        self.assertTrue(res["pgp"]["has_pgp_block"])
-        self.assertTrue(res["pgp"]["is_official_key"])
-        self.assertEqual(res["pgp"]["key_id_found"], "7A35090F")
-        self.assertEqual(res["pgp"]["verdict"], "AUTHENTIC_CICADA_KEY_REFERENCED")
+        unverified_res = self.ws.run_opsec(dummy_signed)
+        self.assertTrue(unverified_res["pgp"]["has_pgp_block"])
+        self.assertFalse(unverified_res["pgp"]["is_official_key"])
+        self.assertFalse(unverified_res["pgp"]["cryptographically_verified"])
+        self.assertEqual(unverified_res["pgp"]["key_id_found"], "7A35090F")
+        self.assertEqual(unverified_res["pgp"]["verdict"], "UNVERIFIED_KEY_ID_REFERENCED")
+
+        # 3. Real RSA-signed cleartext message + RSA public key via zimmermann
+        p = (1 << 511) + 111
+        q = (1 << 511) + 100061
+        n = p * q
+        e = 65537
+        d = pow(e, -1, (p - 1) * (q - 1))
+
+        def _mpi(val: int) -> bytes:
+            bl = val.bit_length()
+            return bl.to_bytes(2, "big") + val.to_bytes((bl + 7) // 8, "big")
+
+        def _pkt(tag: int, body: bytes) -> bytes:
+            l = len(body)
+            hdr = bytes([0xC0 | tag])
+            if l < 192:
+                return hdr + bytes([l]) + body
+            return hdr + bytes([((l - 192) >> 8) + 192, (l - 192) & 0xFF]) + body
+
+        def _armor(label: str, raw: bytes) -> str:
+            b64 = base64.b64encode(raw).decode("ascii")
+            lines = [b64[i:i + 64] for i in range(0, len(b64), 64)]
+            cb64 = base64.b64encode(crc24(raw).to_bytes(3, "big")).decode("ascii")
+            return f"-----BEGIN {label}-----\n\n" + "\n".join(lines) + f"\n={cb64}\n-----END {label}-----"
+
+        def _subpkt(st: int, body: bytes) -> bytes:
+            return bytes([1 + len(body), st]) + body
+
+        key_body = b"\x04" + (1325376000).to_bytes(4, "big") + b"\x01" + _mpi(n) + _mpi(e)
+        fp = hashlib.sha1(b"\x99" + len(key_body).to_bytes(2, "big") + key_body).hexdigest().upper()
+        pubkey_block = _armor("PGP PUBLIC KEY BLOCK", _pkt(6, key_body))
+
+        msg_body = "Beware false paths. Verify the prime signature."
+        canonical = msg_body.replace("\n", "\r\n").encode("utf-8")
+        hashed = (
+            _subpkt(2, (1325376000).to_bytes(4, "big"))
+            + _subpkt(33, b"\x04" + bytes.fromhex(fp))
+            + _subpkt(16, bytes.fromhex(fp[-16:]))
+        )
+        trailer = (
+            bytes([4, 0x01, 1, 8])
+            + len(hashed).to_bytes(2, "big")
+            + hashed
+            + b"\x04\xff"
+            + (6 + len(hashed)).to_bytes(4, "big")
+        )
+        digest = hashlib.sha256(canonical + trailer).digest()
+        k_bytes = (n.bit_length() + 7) // 8
+        prefix = bytes.fromhex(_HASHES[8][1])
+        em = b"\x00\x01" + b"\xff" * (k_bytes - len(prefix) - len(digest) - 3) + b"\x00" + prefix + digest
+        sig_int = pow(int.from_bytes(em, "big"), d, n)
+        sig_body = (
+            bytes([4, 0x01, 1, 8])
+            + len(hashed).to_bytes(2, "big")
+            + hashed
+            + b"\x00\x00"
+            + digest[:2]
+            + _mpi(sig_int)
+        )
+        sig_block = _armor("PGP SIGNATURE", _pkt(2, sig_body))
+        signed_msg = f"-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\n{msg_body}\n{sig_block}"
+
+        with patch.object(opsec, "CICADA_PRIMARY_FINGERPRINT", fp):
+            verified_res = opsec.inspect_pgp_text(signed_msg, pubkey_block=pubkey_block)
+        self.assertTrue(verified_res["has_pgp_block"])
+        self.assertTrue(verified_res["is_official_key"])
+        self.assertTrue(verified_res["cryptographically_verified"])
+        self.assertEqual(verified_res["verdict"], "AUTHENTIC_CICADA_PGP_VERIFIED")
+
+        # 4. Wrong pinned key or tampered text -> PGP_SIGNATURE_MISMATCH
+        mismatch_res = opsec.inspect_pgp_text(signed_msg, pubkey_block=pubkey_block)
+        self.assertFalse(mismatch_res["is_official_key"])
+        self.assertFalse(mismatch_res["cryptographically_verified"])
+        self.assertEqual(mismatch_res["verdict"], "PGP_SIGNATURE_MISMATCH")
 
 
 class TestOptimizations(unittest.TestCase):
@@ -354,11 +447,11 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
 
     def test_ask_retrieve_boost_mode_expansion(self):
         import scripts.ask as ask
-        os.environ["TRITHEMIUS_BOOST"] = "on"
-        # Test bm25_retrieve with default k=TOP_K
-        results = ask.bm25_retrieve("welcome", k=ask.TOP_K)
-        # Should return up to 10 candidates under boost
-        self.assertLessEqual(len(results), 10)
+        with patch.dict(os.environ, {"TRITHEMIUS_BOOST": "on", "TRITHEMIUS_BM25_PERSIST": "off"}):
+            # Test bm25_retrieve with default k=TOP_K
+            results = ask.bm25_retrieve("welcome", k=ask.TOP_K)
+            # Should return up to 10 candidates under boost
+            self.assertLessEqual(len(results), 10)
 
     def test_boost_multiplier_calculation(self):
         from scripts.ask import _calculate_relevance_boost
@@ -393,9 +486,9 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
             mock_sys.assert_called_once()
 
         out = stdout_trap.getvalue()
-        # Verify print_command_list ran before each input prompt (4 times)
+        # Verify print_command_list is suppressed by default to prevent prompt clutter
         cmd_ref_count = out.count("COMMANDS REFERENCE:")
-        self.assertGreaterEqual(cmd_ref_count, 4)
+        self.assertEqual(cmd_ref_count, 0)
         self.assertIn("[*] Deep Cryptanalytic Retrieval & Boost: ENABLED", out)
         self.assertIn("[HELP: /vigenere]", out)
         self.assertIn("Modulo-29 (Futhorc) or Modulo-26", out)
@@ -416,12 +509,30 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
         self.assertIn("/key <provider> <api_key>", out)
 
     def test_run_key_section_set_and_clear(self):
+        import config
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        tmp_env_path = os.path.join(tmp_dir.name, ".env")
+        orig_groq = os.environ.get("GROQ_API_KEY")
+
+        def _restore_env():
+            if orig_groq is None:
+                os.environ.pop("GROQ_API_KEY", None)
+            else:
+                os.environ["GROQ_API_KEY"] = orig_groq
+
+        self.addCleanup(_restore_env)
+        p_cred = patch.object(config, "CREDENTIALS_FILE", tmp_env_path)
+        p_cred.start()
+        self.addCleanup(p_cred.stop)
+
         # Set key
         stdout_trap = io.StringIO()
         with patch("sys.stdout", stdout_trap):
             self.ws.run_key_section(["groq", "gsk_test123456789abc"])
         out = stdout_trap.getvalue()
         self.assertIn("Successfully saved and persisted API key for GROQ", out)
+        self.assertTrue(os.path.exists(tmp_env_path))
 
         # Clear key
         stdout_trap = io.StringIO()
@@ -429,6 +540,7 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
             self.ws.run_key_section(["clear", "groq"])
         out = stdout_trap.getvalue()
         self.assertIn("Successfully removed API key for GROQ", out)
+        self.assertNotIn("GROQ_API_KEY", os.environ)
 
     def test_cli_key_subcommand(self):
         from trithemius import main

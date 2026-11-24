@@ -376,12 +376,16 @@ class TestTerminalWorkstationAndCLIIntegration(unittest.TestCase):
         self.assertIn("END", dec_res["decoded_latin"])
 
     def test_malformed_skip_indices_handled_safely(self):
-        """Verify malformed and out-of-bounds skip indices do not crash CLI or functions."""
+        """Verify out-of-bounds integer skip indices succeed and non-integer tokens fail fast."""
         buf = StringIO()
         with patch("sys.stdout", buf):
-            trithemius.main(["vigenere", "dec", "01", "DIVINITY", "--skip-indices", "abc, -5, 48, xyz, 9999"])
+            trithemius.main(["vigenere", "dec", "01", "DIVINITY", "--skip-indices", "-5, 48, 9999"])
         out = buf.getvalue()
         self.assertIn("VIGENERE CRYPTANALYSIS", out)
+
+        with patch("sys.stderr", StringIO()), self.assertRaises(SystemExit) as ctx:
+            trithemius.main(["vigenere", "dec", "01", "DIVINITY", "--skip-indices", "abc, xyz"])
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_solve_page_custom_external_transcript_file(self):
         """Verify solve_page handles transcript files located outside corpus/."""

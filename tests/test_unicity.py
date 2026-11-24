@@ -15,6 +15,7 @@ from ciphers.unicity import (
     redundancy,
     unicity_distance,
     max_periodic_key_length,
+    max_unconstrained_periodic_key_length,
     identifiability_report,
 )
 
@@ -45,9 +46,21 @@ class TestUnicity(unittest.TestCase):
     def test_identifiability_report_structure(self):
         rep = identifiability_report(236, n=29)
         self.assertEqual(rep["n_symbols"], 236)
+        self.assertEqual(rep["max_unconstrained_periodic_key_len"], 14)
         self.assertIn("scenarios", rep)
         self.assertIn("conservative_3_3", rep["scenarios"])
         self.assertIn("max_resolvable_periodic_key_len", rep["scenarios"]["conservative_3_3"])
+
+    def test_max_unconstrained_periodic_key_length(self):
+        self.assertEqual(max_unconstrained_periodic_key_length(0), 1)
+        self.assertEqual(max_unconstrained_periodic_key_length(-10), 1)
+        self.assertEqual(max_unconstrained_periodic_key_length(15), 1)
+        self.assertEqual(max_unconstrained_periodic_key_length(31), 1)
+        self.assertEqual(max_unconstrained_periodic_key_length(236), 14)
+        self.assertEqual(max_unconstrained_periodic_key_length(12956), 16)
+        self.assertEqual(max_unconstrained_periodic_key_length(120, min_runes_per_col=12, hard_cap=20), 10)
+        self.assertEqual(max_unconstrained_periodic_key_length(500, min_runes_per_col=12, hard_cap=20), 20)
+        self.assertEqual(max_unconstrained_periodic_key_length(10, min_runes_per_col=0, hard_cap=16), 10)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import glob
 import os
 import re
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import config
 from ciphers.agrippa import (
@@ -385,6 +385,8 @@ class CipherService:
         compound: bool = False,
         use_metal: bool = True,
         use_ane: bool = True,
+        progress_callback: Optional[Callable[[Any], None]] = None,
+        cancel_event: Optional[Any] = None,
     ) -> CrackResult:
         """Run full cryptanalytic taxonomy cascade solver on target."""
         tax = _get_taxonomy()
@@ -402,6 +404,8 @@ class CipherService:
             compound=compound,
             use_metal=use_metal,
             use_ane=use_ane,
+            progress_callback=progress_callback,
+            cancel_event=cancel_event,
         )
         res["target_input"] = target
         if file_meta:
@@ -534,7 +538,9 @@ class CipherService:
         page_target: str,
         ref_dir: Optional[str] = None,
         step: int = 1,
-        top_k: int = 5
+        top_k: int = 5,
+        progress_callback: Optional[Callable[[Any], None]] = None,
+        cancel_event: Optional[Any] = None,
     ) -> RunningKeyScanResult:
         """Scan canonical reference texts against target page."""
         payload, file_meta = self._resolve_cipher_input(page_target)
@@ -551,6 +557,8 @@ class CipherService:
             ref_dir=target_dir,
             step=step,
             top_k=top_k,
+            progress_callback=progress_callback,
+            cancel_event=cancel_event,
         )
 
         page_label = file_meta.get("source_file", page_target) if file_meta else page_target
