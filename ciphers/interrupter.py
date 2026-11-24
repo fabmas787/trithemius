@@ -21,7 +21,7 @@ Corrections to previous flawed literature & code:
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Union, Tuple, Dict, Optional, Set, Any
+from typing import List, Union, Tuple, Dict, Optional, Set, Any, Callable
 import os
 import sys
 
@@ -40,6 +40,11 @@ except ImportError:
         RUNE_TABLE, INDEX_BY_RUNE, RUNE_BY_INDEX, PRIME_BY_RUNE, LATIN_BY_RUNE,
         index_to_rune, rune_to_index, latin_to_rune, decode_runes
     )
+
+try:
+    from ciphers.sat_oracle import SATSolver
+except ImportError:
+    from sat_oracle import SATSolver
 
 
 class InterruptMode(Enum):
@@ -490,4 +495,288 @@ def analyze_f_skip_periodicity(ciphertext: str) -> Dict[str, Any]:
         "mean_fehu_interval": mean_interval,
         "segments_between_fehu": segments,
     }
+
+
+# =============================================================================
+# SAT-Based Constraint Oracles & Pruning
+# =============================================================================
+
+class FehuInterruptOracle:
+    """
+    Programmatic constraint oracle for binary Fehu interrupt placements (skip vs advance).
+    Evaluates partial key pause/advance decisions against plaintext linguistic constraints
+    or word boundaries, injecting dynamic blocking clauses into the SAT solver to prune
+    infeasible schedules early.
+    """
+
+    def __init__(
+        self,
+        ciphertext: str,
+        key: Union[str, List[int]],
+        fehu_positions: Optional[List[int]] = None,
+        validator: Optional[Callable[[str], bool]] = None,
+        forbidden_ngrams: Optional[Set[str]] = None
+    ):
+        self.ciphertext = ciphertext
+        self.key = key
+        has_runes = any(c in INDEX_BY_RUNE for c in ciphertext)
+        input_runes = ciphertext if has_runes else latin_to_rune(ciphertext)
+        self.clean_runes = [c for c in input_runes if c in INDEX_BY_RUNE]
+
+        if fehu_positions is None:
+            self.fehu_positions = [
+                i for i, c in enumerate(self.clean_runes)
+                if c == "ᚠ" or INDEX_BY_RUNE.get(c) == 0
+            ]
+        else:
+            self.fehu_positions = list(fehu_positions)
+
+        self.validator = validator
+        self.forbidden_ngrams = forbidden_ngrams or set()
+        # Mapping: SAT variable v in 1..K corresponds to fehu_positions[v - 1]
+        # True = pause key (skip), False = advance key
+        self.var_to_pos: Dict[int, int] = {i + 1: pos for i, pos in enumerate(self.fehu_positions)}
+        self.pos_to_var: Dict[int, int] = {pos: i + 1 for i, pos in enumerate(self.fehu_positions)}
+
+    def __call__(self, partial_assignment: Dict[int, bool]) -> Optional[List[int]]:
+        return self.check_assignment(partial_assignment)
+
+    def check_assignment(self, partial_assignment: Dict[int, bool]) -> Optional[List[int]]:
+        """
+        Evaluates partial Fehu pause/advance assignments.
+        If a decision leads to invalid plaintext (e.g. validator returns False or forbidden n-gram found),
+        returns a blocking clause [-lit_1, ..., -lit_k] forbidding this combination.
+        """
+        if not partial_assignment or (not self.validator and not self.forbidden_ngrams):
+            return None
+
+        # Determine pause positions chosen so far
+        pause_positions = {
+            self.var_to_pos[v] for v, val in partial_assignment.items()
+            if val is True and v in self.var_to_pos
+        }
+
+        # Check only if we have assigned a contiguous prefix or substantial portion of variables
+        assigned_vars = [v for v in partial_assignment.keys() if v in self.var_to_pos]
+        if not assigned_vars:
+            return None
+
+        cfg = InterrupterConfig(
+            interrupt_positions=pause_positions,
+            pause_on_interrupt=True,
+            pass_through=True,
+        )
+        decrypted = rune_vigenere_decode_dynamic(
+            ciphertext=self.ciphertext,
+            key=self.key,
+            config=cfg,
+            preserve_separators=True
+        )
+
+        # Check forbidden n-grams on current partial decryption
+        for ng in self.forbidden_ngrams:
+            if ng in decrypted:
+                return [-v if val else v for v, val in partial_assignment.items()]
+
+        # Check validator function when full schedule is assigned
+        if self.validator is not None:
+            if len(assigned_vars) == len(self.var_to_pos):
+                if not self.validator(decrypted):
+                    return [-v if val else v for v, val in partial_assignment.items()]
+
+        return None
+
+
+class AmbiguousGlyphOracle:
+    """
+    Constraint oracle for resolving ambiguous runic glyph candidates.
+    Given candidate runes for specific positions in ciphertext, generates
+    SAT clauses enforcing exactly-one rune per position and evaluates assignments
+    using blocking clauses when candidate combinations produce invalid words or n-grams.
+    """
+
+    def __init__(
+        self,
+        ciphertext_runes: List[str],
+        ambiguous_candidates: Dict[int, List[str]],
+        key: Union[str, List[int]],
+        validator: Optional[Callable[[str], bool]] = None,
+        config: Optional[InterrupterConfig] = None
+    ):
+        self.ciphertext_runes = list(ciphertext_runes)
+        self.ambiguous_candidates = ambiguous_candidates
+        self.key = key
+        self.validator = validator
+        self.config = config
+
+        self.var_map: Dict[Tuple[int, str], int] = {}
+        self.rev_var_map: Dict[int, Tuple[int, str]] = {}
+        var_id = 1
+        for pos in sorted(self.ambiguous_candidates.keys()):
+            for cand in self.ambiguous_candidates[pos]:
+                self.var_map[(pos, cand)] = var_id
+                self.rev_var_map[var_id] = (pos, cand)
+                var_id += 1
+        self.total_vars = var_id - 1
+
+    def get_at_least_one_and_at_most_one_clauses(self) -> List[List[int]]:
+        """Generates cardinality constraints: exactly one candidate rune per ambiguous position."""
+        clauses: List[List[int]] = []
+        for pos, cands in self.ambiguous_candidates.items():
+            lits = [self.var_map[(pos, c)] for c in cands]
+            # At least one
+            clauses.append(lits)
+            # At most one
+            for i in range(len(lits)):
+                for j in range(i + 1, len(lits)):
+                    clauses.append([-lits[i], -lits[j]])
+        return clauses
+
+    def __call__(self, partial_assignment: Dict[int, bool]) -> Optional[List[int]]:
+        return self.check_assignment(partial_assignment)
+
+    def check_assignment(self, partial_assignment: Dict[int, bool]) -> Optional[List[int]]:
+        """Validates current candidate selections and emits blocking clauses on failure."""
+        if not self.validator:
+            return None
+
+        chosen_runes = list(self.ciphertext_runes)
+        assigned_positions = set()
+        active_true_vars: List[int] = []
+
+        for v, val in partial_assignment.items():
+            if val is True and v in self.rev_var_map:
+                pos, cand = self.rev_var_map[v]
+                chosen_runes[pos] = cand
+                assigned_positions.add(pos)
+                active_true_vars.append(v)
+
+        if len(assigned_positions) == len(self.ambiguous_candidates):
+            candidate_text = "".join(chosen_runes)
+            decrypted = rune_vigenere_decode_dynamic(
+                ciphertext=candidate_text,
+                key=self.key,
+                config=self.config,
+                preserve_separators=True
+            )
+            if not self.validator(decrypted):
+                return [-v for v in active_true_vars]
+
+        return None
+
+
+def solve_fehu_interrupts_sat(
+    ciphertext: str,
+    key: Union[str, List[int]],
+    candidate_positions: Optional[List[int]] = None,
+    validator: Optional[Callable[[str], bool]] = None,
+    forbidden_ngrams: Optional[Set[str]] = None,
+    max_solutions: int = 10
+) -> List[Dict[str, Any]]:
+    """
+    Solves for valid binary Fehu interrupt placements (skip vs advance) using
+    pure-Python CDCL/DPLL SAT with dynamic blocking clause pruning.
+
+    Args:
+        ciphertext: Ciphertext containing Fehu runes.
+        key: Key word or numeric shifts.
+        candidate_positions: Optional explicit Fehu positions (auto-detected if None).
+        validator: Plaintext acceptance function.
+        forbidden_ngrams: Set of forbidden runic n-grams to prune.
+        max_solutions: Max satisfying schedules to return.
+
+    Returns:
+        List of dicts: {"schedule": Set[int], "plaintext": str, "assignment": Dict[int, bool]}
+    """
+    oracle = FehuInterruptOracle(
+        ciphertext=ciphertext,
+        key=key,
+        fehu_positions=candidate_positions,
+        validator=validator,
+        forbidden_ngrams=forbidden_ngrams,
+    )
+
+    num_vars = len(oracle.fehu_positions)
+    if num_vars == 0:
+        plain = rune_vigenere_decode_dynamic(ciphertext, key)
+        return [{"schedule": set(), "plaintext": plain, "assignment": {}}]
+
+    solver = SATSolver(num_vars=num_vars)
+    raw_solutions = solver.solve_all(oracle_fn=oracle, max_solutions=max_solutions)
+
+    results: List[Dict[str, Any]] = []
+    for model in raw_solutions:
+        schedule = {oracle.var_to_pos[v] for v, val in model.items() if val is True and v in oracle.var_to_pos}
+        cfg = InterrupterConfig(
+            interrupt_positions=schedule,
+            pause_on_interrupt=True,
+            pass_through=True,
+        )
+        plain = rune_vigenere_decode_dynamic(ciphertext, key, config=cfg)
+        results.append({
+            "schedule": schedule,
+            "plaintext": plain,
+            "assignment": model,
+        })
+
+    return results
+
+
+def solve_ambiguous_glyphs_sat(
+    ciphertext: str,
+    ambiguous_map: Dict[int, List[str]],
+    key: Union[str, List[int]],
+    validator: Optional[Callable[[str], bool]] = None,
+    config: Optional[InterrupterConfig] = None,
+    max_solutions: int = 10
+) -> List[Dict[str, Any]]:
+    """
+    Solves for valid rune selections across ambiguous positions using pure-Python
+    SAT and CDCL with blocking clauses.
+
+    Args:
+        ciphertext: Ciphertext string with placeholder or default runes.
+        ambiguous_map: Mapping of character position -> list of possible candidate runes.
+        key: Decryption key word or shifts.
+        validator: Plaintext validator function.
+        config: Optional dynamic interrupter configuration.
+        max_solutions: Max valid assignments to return.
+
+    Returns:
+        List of dicts: {"resolved_ciphertext": str, "plaintext": str, "selections": Dict[int, str]}
+    """
+    runes = list(ciphertext)
+    oracle = AmbiguousGlyphOracle(
+        ciphertext_runes=runes,
+        ambiguous_candidates=ambiguous_map,
+        key=key,
+        validator=validator,
+        config=config,
+    )
+
+    solver = SATSolver(num_vars=oracle.total_vars)
+    solver.add_clauses(oracle.get_at_least_one_and_at_most_one_clauses())
+
+    raw_solutions = solver.solve_all(oracle_fn=oracle, max_solutions=max_solutions)
+
+    results: List[Dict[str, Any]] = []
+    for model in raw_solutions:
+        selections: Dict[int, str] = {}
+        res_runes = list(runes)
+        for v, val in model.items():
+            if val is True and v in oracle.rev_var_map:
+                pos, cand = oracle.rev_var_map[v]
+                selections[pos] = cand
+                res_runes[pos] = cand
+
+        resolved_ct = "".join(res_runes)
+        decrypted = rune_vigenere_decode_dynamic(resolved_ct, key, config=config)
+        results.append({
+            "resolved_ciphertext": resolved_ct,
+            "plaintext": decrypted,
+            "selections": selections,
+        })
+
+    return results
+
 

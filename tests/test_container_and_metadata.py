@@ -271,6 +271,28 @@ class TestLosslessSteganalysis(unittest.TestCase):
         self.assertTrue(res_stego["whitening_detected"])
         self.assertLess(abs(res_stego["r_horizontal"]), 0.05)
 
+    def test_opsec_binary_wht_ddt_and_rsa_audit(self):
+        """Verify binary WHT/DDT and RSA audit pipeline checks exposed by opsec."""
+        # 1. Binary WHT/DDT
+        sbox = [12, 5, 6, 11, 9, 0, 10, 13, 3, 14, 15, 8, 4, 7, 1, 2]
+        res_wht = opsec.check_binary_wht_ddt(sbox)
+        self.assertIn("differential_uniformity", res_wht)
+        self.assertIn("max_wht_amplitude", res_wht)
+        self.assertGreater(res_wht["differential_uniformity"], 0)
+        self.assertTrue(res_wht["audit_passed"])
+
+        # 2. RSA Audit check (Fermat close prime vulnerability)
+        p = 1000000007
+        q = 1000000009
+        res_rsa = opsec.check_rsa_audit(p * q, e=65537)
+        self.assertIn("vulnerable", res_rsa)
+        self.assertTrue(res_rsa["vulnerable"])
+        self.assertFalse(res_rsa.get("audit_passed", True))
+
+        # 3. RSA Audit check on prime modulus (invalid RSA key)
+        res_prime = opsec.check_rsa_audit(3301, e=65537)
+        self.assertTrue(res_prime["is_modulus_prime"])
+
 
 if __name__ == "__main__":
     unittest.main()

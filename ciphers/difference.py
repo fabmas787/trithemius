@@ -17,7 +17,7 @@ Features:
 from __future__ import annotations
 import math
 import hashlib
-from typing import List, Sequence, Tuple, Dict, Any, Optional
+from typing import List, Sequence, Tuple, Dict, Any, Optional, Union
 
 N = 29
 
@@ -52,6 +52,91 @@ def is_keystream_delta_valid(cipher: Sequence[int], key: Sequence[int], n: int =
     rate = zero_count / len(diffs)
     # The unsolved pages have doublet rate ~0.66%, uniform random is ~3.45%
     return rate <= 0.015
+
+
+def difference_ioc(
+    runes: Union[str, Sequence[int]],
+    lag: int = 1,
+    modulus: int = N
+) -> float:
+    """
+    Calculate the Index of Coincidence (IoC) of the difference sequence at given lag:
+    Delta_i = (c_{i+lag} - c_i) mod modulus.
+
+    Accepts either:
+    - A runic text string (characters mapped via INDEX_BY_RUNE)
+    - A sequence of integer symbol values in Z_modulus
+    """
+    if lag <= 0:
+        return 0.0
+
+    symbols: List[int] = []
+    if isinstance(runes, str):
+        try:
+            from ciphers.agrippa import INDEX_BY_RUNE
+        except ImportError:
+            from agrippa import INDEX_BY_RUNE
+        symbols = [INDEX_BY_RUNE[c] for c in runes if c in INDEX_BY_RUNE]
+    else:
+        symbols = [int(x) % modulus for x in runes]
+
+    n_sym = len(symbols)
+    if n_sym <= lag:
+        return 0.0
+
+    diffs = [(symbols[i + lag] - symbols[i]) % modulus for i in range(n_sym - lag)]
+    n_diff = len(diffs)
+    if n_diff < 2:
+        return 0.0
+
+    counts: Dict[int, int] = {}
+    for d in diffs:
+        counts[d] = counts.get(d, 0) + 1
+
+    total = sum(c * (c - 1) for c in counts.values())
+    return total / (n_diff * (n_diff - 1))
+
+
+def _word_pattern(word: Sequence[Any]) -> Tuple[int, ...]:
+    """Compute the canonical isomorphism pattern of a word based on first occurrence IDs."""
+    seen: Dict[Any, int] = {}
+    pattern: List[int] = []
+    for item in word:
+        if item not in seen:
+            seen[item] = len(seen)
+        pattern.append(seen[item])
+    return tuple(pattern)
+
+
+def pattern_ioc(words: Union[str, Sequence[Union[str, Sequence[Any]]]]) -> float:
+    """
+    Calculate the Index of Coincidence over word letter-patterns (isomorphism signatures).
+    Measures non-uniformity of word structures across words. Words with identical internal
+    repetition structures (e.g. 'THAT' -> (0, 1, 2, 0), 'SEEK' -> (0, 1, 1, 2)) share patterns.
+
+    Accepts:
+    - A sequence of word strings or symbol sequences
+    - A single text string (tokenized by whitespace and runic/standard punctuation)
+    """
+    word_list: List[Sequence[Any]] = []
+    if isinstance(words, str):
+        import re
+        tokens = re.split(r'[\s᛫᛬᛭.,;:!?\-/&%§$]+', words)
+        word_list = [t for t in tokens if t]
+    else:
+        word_list = [w for w in words if len(w) > 0]
+
+    n_words = len(word_list)
+    if n_words < 2:
+        return 0.0
+
+    pattern_counts: Dict[Tuple[int, ...], int] = {}
+    for w in word_list:
+        pat = _word_pattern(w)
+        pattern_counts[pat] = pattern_counts.get(pat, 0) + 1
+
+    total = sum(c * (c - 1) for c in pattern_counts.values())
+    return total / (n_words * (n_words - 1))
 
 
 # =============================================================================

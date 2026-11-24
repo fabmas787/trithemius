@@ -6,11 +6,15 @@ candidate plaintext likelihood evaluation, and latent space projection.
 Strictly offline and local — uses pre-existing cached models with zero network requests.
 """
 
+from __future__ import annotations
 import os
 import sys
 import logging
 from typing import List, Tuple, Dict, Any, Optional, Sequence
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 logger = logging.getLogger("ane_engine")
 

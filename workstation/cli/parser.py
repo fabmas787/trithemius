@@ -84,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_crk = subparsers.add_parser("crack", help="Liber Primus GF(29) Cryptanalytic Cascade Solver")
     p_crk.add_argument("text", type=str, help="Ciphertext, filepath, or corpus page number")
     p_crk.add_argument("--deep", action="store_true", help="Enable deep search (affine mod 29, autokey, cross-page)")
+    p_crk.add_argument("--include-ecc", action="store_true", help="Enable elliptic curve keystream sweeps")
 
     # triage subcommand
     p_trg = subparsers.add_parser("triage", help="Statistical triage & cipher classification")
@@ -259,7 +260,8 @@ def cli_dispatch(parsed_args: argparse.Namespace, ws: TerminalWorkstation, parse
         res = ws.run_solve(parsed_args.target)
         ws.print_solve(res)
     elif parsed_args.subcommand == "crack":
-        res = ws.run_crack(parsed_args.text, deep=parsed_args.deep)
+        include_ecc = getattr(parsed_args, "include_ecc", False)
+        res = ws.run_crack(parsed_args.text, deep=parsed_args.deep, include_ecc=include_ecc)
         ws.print_crack(res)
     elif parsed_args.subcommand == "triage":
         res = ws.run_triage(parsed_args.text)

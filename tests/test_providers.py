@@ -16,6 +16,28 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
+_ORIGINAL_REQUESTS = sys.modules.get("requests")
+_ORIGINAL_ADAPTERS = sys.modules.get("requests.adapters")
+
+try:
+    import requests
+except ImportError:
+    requests = MagicMock()
+    requests.__path__ = []
+    sys.modules["requests"] = requests
+    sys.modules["requests.adapters"] = MagicMock()
+
+
+def tearDownModule():
+    if _ORIGINAL_REQUESTS is None:
+        sys.modules.pop("requests", None)
+    else:
+        sys.modules["requests"] = _ORIGINAL_REQUESTS
+    if _ORIGINAL_ADAPTERS is None:
+        sys.modules.pop("requests.adapters", None)
+    else:
+        sys.modules["requests.adapters"] = _ORIGINAL_ADAPTERS
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)

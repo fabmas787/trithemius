@@ -21,7 +21,7 @@ import os
 import random
 import re
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
@@ -170,6 +170,59 @@ except ImportError:
         is_ane_available = lambda: False
         get_ane_device_info = lambda: {"available": False}
         score_candidate_naturalness_neural = None
+
+try:
+    from ciphers.ecc_stream import (
+        EllipticCurve,
+        get_canonical_cicada_curve,
+        generate_ecc_keystream,
+        extract_x_stream,
+        extract_y_stream,
+        CICADA_PRIMES,
+    )
+except ImportError:
+    try:
+        from ecc_stream import (
+            EllipticCurve,
+            get_canonical_cicada_curve,
+            generate_ecc_keystream,
+            extract_x_stream,
+            extract_y_stream,
+            CICADA_PRIMES,
+        )
+    except ImportError:
+        EllipticCurve = None
+        get_canonical_cicada_curve = None
+        generate_ecc_keystream = None
+        extract_x_stream = None
+        extract_y_stream = None
+        CICADA_PRIMES = ()
+
+try:
+    from ciphers.spectral_sbox import (
+        affine_inversion_sbox,
+        power_map_sbox,
+        mobius_sbox,
+    )
+except ImportError:
+    try:
+        from spectral_sbox import (
+            affine_inversion_sbox,
+            power_map_sbox,
+            mobius_sbox,
+        )
+    except ImportError:
+        affine_inversion_sbox = None
+        power_map_sbox = None
+        mobius_sbox = None
+
+try:
+    from ciphers.difference import difference_ioc
+except ImportError:
+    try:
+        from difference import difference_ioc
+    except ImportError:
+        difference_ioc = None
 
 M = 29  # Galois field GF(29)
 
@@ -465,10 +518,30 @@ def compute_word_length_distribution(raw_text: str) -> Dict[int, int]:
     return dict(sorted(lens.items()))
 
 
+def compute_difference_ioc(indices: List[int], lag: int = 1, modulus: int = M) -> float:
+    """
+    Index of Coincidence of forward differences: Delta_i = (c_{i+lag} - c_i) mod modulus.
+    Exposes difference-domain structure even when raw unigram frequencies appear flat.
+    """
+    if difference_ioc is not None:
+        try:
+            return float(difference_ioc(indices, lag=lag, modulus=modulus))
+        except Exception:
+            pass
+    if len(indices) <= lag:
+        return 0.0
+    diffs = [(indices[i + lag] - indices[i]) % modulus for i in range(len(indices) - lag)]
+    n = len(diffs)
+    if n < 2:
+        return 0.0
+    counts = Counter(diffs)
+    return sum(c * (c - 1) for c in counts.values()) / (n * (n - 1))
+
+
 def triage_cipher(ciphertext: str) -> dict:
     """
     Executes full statistical triage to diagnose cipher family.
-    Returns IC, normalized kappa, bigram IC, conditional entropy, F-skip & doubles diagnostics, and classification.
+    Returns IC, normalized kappa, bigram IC, difference IoC, conditional entropy, F-skip & doubles diagnostics, and classification.
     """
     indices = clean_runes_to_indices(ciphertext)
     n = len(indices)
@@ -480,6 +553,7 @@ def triage_cipher(ciphertext: str) -> dict:
             "ic": 0.0,
             "normalized_kappa": 0.0,
             "bigram_ic": 0.0,
+            "difference_ioc": 0.0,
             "conditional_entropy": 0.0,
             "consecutive_doubles_count": 0,
             "consecutive_doubles_rate": 0.0,
@@ -496,6 +570,7 @@ def triage_cipher(ciphertext: str) -> dict:
     ic = compute_unigram_ic(indices)
     kappa = compute_normalized_kappa(indices)
     bigram_ic = compute_bigram_ic(indices)
+    diff_ioc = compute_difference_ioc(indices, lag=1, modulus=M)
     cond_entropy = compute_conditional_entropy(indices)
     word_lens = compute_word_length_distribution(ciphertext)
 
@@ -540,6 +615,7 @@ def triage_cipher(ciphertext: str) -> dict:
         "ic": round(ic, 5),
         "normalized_kappa": round(kappa, 4),
         "bigram_ic": round(bigram_ic, 5),
+        "difference_ioc": round(diff_ioc, 5),
         "conditional_entropy": cond_entropy,
         "word_lengths": word_lens,
         "consecutive_doubles_count": f_diag.get("consecutive_doubles_count", 0),
@@ -1378,6 +1454,96 @@ class StreamHashBank:
 
 HASH_BANK = StreamHashBank()
 
+OEIS_SEQUENCES: Dict[str, List[int]] = {}
+
+
+def _init_oeis_sequences(length: int = 500) -> Dict[str, List[int]]:
+    """Initialize canonical OEIS sequences mod 29 for fuzzy keystream matching."""
+    seqs: Dict[str, List[int]] = {}
+
+    # A000040: Primes mod 29
+    primes = []
+    c = 2
+    while len(primes) < length:
+        if is_prime(c):
+            primes.append(c % M)
+        c += 1
+    seqs["A000040_PRIMES"] = primes
+
+    # A006093: Prime totients phi(p) = p - 1 mod 29
+    seqs["A006093_PRIME_TOTIENTS"] = [(p - 1) % M for p in primes]
+
+    # A000010: Euler totients phi(n) mod 29
+    seqs["A000010_TOTIENTS"] = [euler_totient(n) % M for n in range(1, length + 1)]
+
+    # A000045: Fibonacci mod 29
+    fib = [0, 1]
+    while len(fib) < length:
+        fib.append((fib[-1] + fib[-2]) % M)
+    seqs["A000045_FIBONACCI"] = fib
+
+    # A000032: Lucas numbers mod 29
+    lucas = [2, 1]
+    while len(lucas) < length:
+        lucas.append((lucas[-1] + lucas[-2]) % M)
+    seqs["A000032_LUCAS"] = lucas
+
+    # A000217: Triangular numbers n*(n+1)//2 mod 29
+    seqs["A000217_TRIANGULAR"] = [((n * (n + 1)) // 2) % M for n in range(length)]
+
+    # A000290: Squares n^2 mod 29
+    seqs["A000290_SQUARES"] = [(n * n) % M for n in range(length)]
+
+    # A000142: Factorials n! mod 29
+    facts = [1]
+    for n in range(1, min(length, 60)):
+        facts.append((facts[-1] * n) % M)
+    while len(facts) < length:
+        facts.append(0)
+    seqs["A000142_FACTORIAL"] = facts
+
+    # A000108: Catalan numbers C_n mod 29
+    catalan = [1]
+    for n in range(1, min(length, 60)):
+        c_val = (catalan[-1] * (4 * n - 2) // (n + 1))
+        catalan.append(c_val % M)
+    while len(catalan) < length:
+        catalan.append(0)
+    seqs["A000108_CATALAN"] = catalan
+
+    return seqs
+
+
+def fuzzy_oeis_match(
+    fragment: Sequence[int],
+    max_hamming: int = 2,
+    max_offset: int = 150,
+) -> List[Dict[str, Any]]:
+    """
+    Compare fragment against OEIS canonical sequences mod 29 with Hamming distance <= max_hamming.
+    Tolerance defaults to Hamming distance <= 2.
+    """
+    k_len = len(fragment)
+    if k_len < 4:
+        return []
+    global OEIS_SEQUENCES
+    if not OEIS_SEQUENCES:
+        OEIS_SEQUENCES = _init_oeis_sequences(max_offset + k_len + 50)
+
+    matches: List[Dict[str, Any]] = []
+    for name, stream in OEIS_SEQUENCES.items():
+        for offset in range(min(max_offset, len(stream) - k_len + 1)):
+            target = stream[offset : offset + k_len]
+            h_dist = sum(1 for a, b in zip(fragment, target) if a != b)
+            if h_dist <= max_hamming:
+                matches.append({
+                    "oeis_id": name,
+                    "offset": offset,
+                    "hamming_distance": h_dist,
+                    "tolerance": max_hamming,
+                })
+    return sorted(matches, key=lambda m: m["hamming_distance"])
+
 
 def drag_crib(ciphertext_indices: List[int], crib_text_or_runes: str) -> List[dict]:
     """
@@ -1388,6 +1554,7 @@ def drag_crib(ciphertext_indices: List[int], crib_text_or_runes: str) -> List[di
     - Berlekamp-Massey linear complexity over GF(29)
     - Constant finite differences
     - O(1) hash bank match against precomputed deterministic streams
+    - Fuzzy OEIS matching with Hamming distance <= 2 tolerance
     """
     crib_indices = clean_runes_to_indices(crib_text_or_runes)
     c_len = len(crib_indices)
@@ -1409,6 +1576,10 @@ def drag_crib(ciphertext_indices: List[int], crib_text_or_runes: str) -> List[di
         # 3. Check hash bank
         bank_match = HASH_BANK.query_fragment(implied_k)
 
+        # 3b. Check fuzzy OEIS sequence match (Hamming distance <= 2 tolerance)
+        oeis_matches = fuzzy_oeis_match(implied_k, max_hamming=2)
+        oeis_hit = oeis_matches[0] if oeis_matches else None
+
         # 4. Check dictionary word or prefix match
         implied_runes = indices_to_runes(implied_k)
         if LEXICON_INDEX is not None:
@@ -1420,7 +1591,7 @@ def drag_crib(ciphertext_indices: List[int], crib_text_or_runes: str) -> List[di
             )
 
         # Keep significant hits
-        if is_linear or (poly_order is not None) or bank_match or is_word:
+        if is_linear or (poly_order is not None) or bank_match or is_word or (oeis_hit is not None):
             hits.append({
                 "position": j,
                 "crib": crib_text_or_runes,
@@ -1429,6 +1600,7 @@ def drag_crib(ciphertext_indices: List[int], crib_text_or_runes: str) -> List[di
                 "linear_complexity": lc,
                 "algebraic_order": poly_order,
                 "bank_match": bank_match,
+                "fuzzy_oeis": oeis_hit,
                 "is_lexicon_word": is_word,
             })
 
@@ -1543,6 +1715,183 @@ def sweep_affine_mod29(indices: List[int]) -> List[dict]:
                     "plaintext_runes": indices_to_runes(dec),
                     "plaintext_latin": decode_runes(indices_to_runes(dec)),
                 })
+    return sorted(hits, key=lambda x: -x["score"])
+
+
+def sweep_sbox_substitutions(
+    indices: List[int],
+    max_candidates: int = 50,
+) -> List[dict]:
+    """
+    Sweep nonlinear S-box substitutions over F_29:
+    1. Affine inversion S-boxes: S(x) = (a * x^(27) + b) mod 29 (0^-1 := 0).
+    2. Power maps: S(x) = x^k mod 29 for gcd(k, 28) == 1.
+    3. Mobius / projective maps on P^1(F_29).
+    Scores each substituted plaintext under the calibrated runic bigram model.
+    """
+    n = len(indices)
+    if n < 4:
+        return []
+
+    sboxes: List[Tuple[str, List[int]]] = []
+
+    # 1. Inversion S-boxes: S(x) = (a * inv(x) + b) mod 29
+    for a in (1, 2, 3, 5, 7, 11, 13, 17, 19, 23):
+        for b in (0, 1, 2, 3, 5, 7):
+            sbox = [0] * M
+            for x in range(M):
+                inv_x = pow(x, M - 2, M) if x != 0 else 0
+                sbox[x] = (a * inv_x + b) % M
+            sboxes.append((f"AFFINE_INVERSION_a{a}_b{b}", sbox))
+
+    # 2. Power maps: x^k mod 29 for gcd(k, 28) == 1
+    power_exponents = [k for k in range(1, 28) if math.gcd(k, 28) == 1]
+    for k in power_exponents:
+        sbox = [pow(x, k, M) for x in range(M)]
+        sboxes.append((f"POWER_MAP_k{k}", sbox))
+
+    # 3. Spectral S-Box module generators if available
+    if affine_inversion_sbox is not None:
+        try:
+            for a in (1, 3, 7):
+                for b in (0, 1):
+                    sb = affine_inversion_sbox(a=a, b=b, modulus=M)
+                    sboxes.append((f"SPECTRAL_AFFINE_INV_a{a}_b{b}", sb))
+        except Exception:
+            pass
+
+    hits = []
+    for name, sbox in sboxes:
+        dec = [sbox[x] for x in indices]
+        score = score_composite_runes(dec)
+        if score >= -3.35:
+            hits.append({
+                "method": "SBOX_SUBSTITUTION",
+                "sbox_type": name,
+                "score": score,
+                "plaintext_runes": indices_to_runes(dec),
+                "plaintext_latin": decode_runes(indices_to_runes(dec)),
+            })
+
+    return sorted(hits, key=lambda x: -x["score"])[:max_candidates]
+
+
+def sweep_ecc_keystreams(
+    indices: List[int],
+    primes: Optional[Sequence[int]] = None,
+    max_offset: int = 50,
+) -> List[dict]:
+    """
+    Sweep elliptic curve keystreams over F_29 and Cicada primes (p=3301, 1033, 761, 29).
+    Extracts coordinates x(kP) mod 29 and y(kP) mod 29 for k = 1..n, evaluating additive,
+    subtractive, and Fehu-skip decryptions.
+    """
+    n = len(indices)
+    if n < 4 or EllipticCurve is None:
+        return []
+
+    target_primes = primes or (3301, 1033, 761, 29)
+    hits = []
+
+    for p in target_primes:
+        try:
+            curve, base_pt = get_canonical_cicada_curve(p=p, a=1, b=1)
+        except Exception:
+            continue
+
+        for coord in ("x", "y"):
+            for k_start in (1, 2, 3, 5, 7):
+                keystream = generate_ecc_keystream(
+                    curve, base_pt, n, coord=coord, k_start=k_start, mod=M
+                )
+                if len(keystream) < n:
+                    continue
+
+                # Subtractive decryption: (c - k) mod 29
+                dec_sub = [(indices[i] - keystream[i]) % M for i in range(n)]
+                score_sub = score_composite_runes(dec_sub)
+                if score_sub >= -3.35:
+                    hits.append({
+                        "method": "ECC_STREAM_SUBTRACTIVE",
+                        "prime": p,
+                        "coord": coord,
+                        "k_start": k_start,
+                        "score": score_sub,
+                        "plaintext_runes": indices_to_runes(dec_sub),
+                        "plaintext_latin": decode_runes(indices_to_runes(dec_sub)),
+                    })
+
+                # Additive decryption: (c + k) mod 29
+                dec_add = [(indices[i] + keystream[i]) % M for i in range(n)]
+                score_add = score_composite_runes(dec_add)
+                if score_add >= -3.35:
+                    hits.append({
+                        "method": "ECC_STREAM_ADDITIVE",
+                        "prime": p,
+                        "coord": coord,
+                        "k_start": k_start,
+                        "score": score_add,
+                        "plaintext_runes": indices_to_runes(dec_add),
+                        "plaintext_latin": decode_runes(indices_to_runes(dec_add)),
+                    })
+
+                # Fehu-skip variant
+                if any(idx == 0 for idx in indices):
+                    dec_fskip = []
+                    k_ptr = 0
+                    for i in range(n):
+                        if indices[i] == 0:
+                            dec_fskip.append(0)
+                        else:
+                            dec_fskip.append((indices[i] - keystream[k_ptr % len(keystream)]) % M)
+                            k_ptr += 1
+                    score_fskip = score_composite_runes(dec_fskip)
+                    if score_fskip >= -3.35:
+                        hits.append({
+                            "method": "ECC_STREAM_FEHU_SKIP",
+                            "prime": p,
+                            "coord": coord,
+                            "k_start": k_start,
+                            "score": score_fskip,
+                            "plaintext_runes": indices_to_runes(dec_fskip),
+                            "plaintext_latin": decode_runes(indices_to_runes(dec_fskip)),
+                        })
+
+    return sorted(hits, key=lambda x: -x["score"])
+
+
+def sweep_oeis_sequences(
+    indices: List[int],
+    max_offset: int = 150,
+    max_hamming: int = 2,
+) -> List[dict]:
+    """
+    Sweep canonical OEIS sequences mod 29 against ciphertext indices,
+    allowing a Hamming distance tolerance <= 2.
+    """
+    n = len(indices)
+    if n < 4:
+        return []
+    global OEIS_SEQUENCES
+    if not OEIS_SEQUENCES:
+        OEIS_SEQUENCES = _init_oeis_sequences(max_offset + n + 50)
+
+    hits = []
+    for name, stream in OEIS_SEQUENCES.items():
+        for offset in range(min(max_offset, len(stream) - n + 1)):
+            k_slice = stream[offset : offset + n]
+            dec = [(indices[i] - k_slice[i]) % M for i in range(n)]
+            score = score_composite_runes(dec)
+            if score >= -3.35:
+                hits.append({
+                    "method": "OEIS_SEQUENCE_STREAM",
+                    "oeis_id": name,
+                    "offset": offset,
+                    "score": score,
+                    "plaintext_runes": indices_to_runes(dec),
+                    "plaintext_latin": decode_runes(indices_to_runes(dec)),
+                })
+
     return sorted(hits, key=lambda x: -x["score"])
 
 
@@ -1727,6 +2076,8 @@ def crack_liber_primus(
     use_metal: bool = True,
     use_ane: bool = True,
     compound: bool = False,
+    include_ecc: bool = False,
+    include_sbox: bool = False,
 ) -> dict:
     """
     Full end-to-end staged cascade solver:
@@ -2107,6 +2458,16 @@ def crack_liber_primus(
             for hit in rk_hits[:3]:
                 candidates.append(hit)
 
+    if deep or include_sbox:
+        sbox_hits = sweep_sbox_substitutions(indices)
+        for hit in sbox_hits[:5]:
+            candidates.append(hit)
+
+    if deep or include_ecc:
+        ecc_hits = sweep_ecc_keystreams(indices)
+        for hit in ecc_hits[:5]:
+            candidates.append(hit)
+
     # Step 7b: Neural Semantic Reranking on Apple Neural Engine (ANE)
     if use_ane and is_ane_available() and score_candidate_naturalness_neural is not None and candidates:
         try:
@@ -2192,3 +2553,28 @@ def crack_liber_primus(
             "neural_engine": get_ane_device_info() if is_ane_available() else {"available": False},
         },
     }
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Taxonomy Liber Primus GF(29) Cryptanalytic Suite")
+    parser.add_argument("target", help="Ciphertext runes, Latin text, or file path")
+    parser.add_argument("--deep", action="store_true", help="Enable deep search (affine, cross-page, s-box, ecc)")
+    parser.add_argument("--include-ecc", action="store_true", help="Enable elliptic curve keystream sweeps")
+    parser.add_argument("--include-sbox", action="store_true", help="Enable nonlinear S-Box sweeps")
+    parser.add_argument("--top-k", type=int, default=5, help="Top K candidates to return")
+    args = parser.parse_args()
+
+    target_input = args.target
+    if os.path.exists(target_input):
+        with open(target_input, "r", encoding="utf-8") as f:
+            target_input = f.read()
+
+    result = crack_liber_primus(
+        target_input,
+        deep=args.deep,
+        include_ecc=args.include_ecc,
+        include_sbox=args.include_sbox,
+        top_k=args.top_k,
+    )
+    print(json.dumps(result, indent=2, default=str))

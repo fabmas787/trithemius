@@ -681,37 +681,73 @@ def filter_untested_words(words: List[str], page: Optional[Union[str, int]] = No
 def query_similar_attempts(query_word_or_text: str, n_results: int = 5, page: Optional[str] = None, db_dir: str = VECTOR_DIR) -> List[dict]:
     """
     Queries ChromaDB vector database using cosine distance to retrieve nearest attempted hypotheses.
+    Falls back gracefully to SQLite deterministic embeddings if ChromaDB is unavailable.
     """
     try:
         coll = get_attempts_vector_collection(db_dir)
-        if coll is None or coll.count() == 0:
+        if coll is not None and coll.count() > 0:
+            q_emb = deterministic_embed(query_word_or_text)
+            where_clause = {"page": canonical_page(page)} if page is not None else None
+            res = coll.query(
+                query_embeddings=[q_emb],
+                n_results=min(n_results, coll.count()),
+                where=where_clause,
+                include=["documents", "metadatas", "distances"],
+            )
+            hits = []
+            if res and "ids" in res and res["ids"] and res["ids"][0]:
+                for i, aid in enumerate(res["ids"][0]):
+                    meta = res["metadatas"][0][i] if res["metadatas"] else {}
+                    dist = res["distances"][0][i] if res["distances"] else 0.0
+                    doc = res["documents"][0][i] if res["documents"] else ""
+                    hits.append({
+                        "id": aid,
+                        "word": meta.get("word", ""),
+                        "page": meta.get("page", ""),
+                        "method": meta.get("method", ""),
+                        "score": meta.get("score", 0.0),
+                        "distance": round(dist, 4),
+                        "similarity": round(1.0 - dist, 4),
+                        "document": doc,
+                        "timestamp": meta.get("timestamp", ""),
+                    })
+            return hits
+
+        # Fallback to SQLite deterministic embeddings
+        db_sqlite = os.path.join(db_dir, "ledger.sqlite3") if db_dir != VECTOR_DIR else DB_PATH
+        if not os.path.exists(db_sqlite):
             return []
+        conn = _connect(db_sqlite)
+        query = "SELECT canonical_key, word, page, method, score, result_preview, created_at FROM canonical_attempts"
+        params = []
+        if page is not None:
+            query += " WHERE page = ?"
+            params.append(canonical_page(page))
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+        conn.close()
+
         q_emb = deterministic_embed(query_word_or_text)
-        where_clause = {"page": canonical_page(page)} if page is not None else None
-        res = coll.query(
-            query_embeddings=[q_emb],
-            n_results=min(n_results, coll.count()),
-            where=where_clause,
-            include=["documents", "metadatas", "distances"],
-        )
-        hits = []
-        if res and "ids" in res and res["ids"] and res["ids"][0]:
-            for i, aid in enumerate(res["ids"][0]):
-                meta = res["metadatas"][0][i] if res["metadatas"] else {}
-                dist = res["distances"][0][i] if res["distances"] else 0.0
-                doc = res["documents"][0][i] if res["documents"] else ""
-                hits.append({
-                    "id": aid,
-                    "word": meta.get("word", ""),
-                    "page": meta.get("page", ""),
-                    "method": meta.get("method", ""),
-                    "score": meta.get("score", 0.0),
-                    "distance": round(dist, 4),
-                    "similarity": round(1.0 - dist, 4),
-                    "document": doc,
-                    "timestamp": meta.get("timestamp", ""),
-                })
-        return hits
+        candidates = []
+        for ckey, word, pg, meth, sc, prev, tstamp in rows:
+            if not word:
+                continue
+            emb = deterministic_embed(f"{word} {meth.upper()}")
+            sim = sum(a * b for a, b in zip(q_emb, emb))
+            dist = max(0.0, 1.0 - sim)
+            candidates.append({
+                "id": ckey,
+                "word": word,
+                "page": pg,
+                "method": meth.upper(),
+                "score": sc,
+                "distance": round(dist, 4),
+                "similarity": round(sim, 4),
+                "document": f"Attempted keyword '{word}' on page {pg} using method {meth.upper()}. Score: {sc:.4f}",
+                "timestamp": tstamp or "",
+            })
+        candidates.sort(key=lambda x: x["distance"])
+        return candidates[:n_results]
     except Exception:
         return []
 

@@ -32,7 +32,7 @@ flowchart TD
         Agrippa["Agrippa (ciphers/agrippa.py)\nGematria Primus & Sacred Math"]
         Kasiski["Kasiski (ciphers/kasiski.py)\nMod-29/26 Vigenère & Keystreams"]
         AlKindi["Al-Kindi (ciphers/al_kindi.py)\nChi-Squared & N-Gram Gatekeeper"]
-        Taxonomy["Taxonomy & Ciphers (ciphers/taxonomy.py + 14 modules)\nGF(29) Solver Suite & Hardware Accel"]
+        Taxonomy["Taxonomy & Ciphers (ciphers/taxonomy.py + 20 modules)\nGF(29) Solver Suite, Lattices, Algebraic & Hardware Accel"]
         OpSec["OpSec & Entropy (ciphers/opsec.py, entropy.py)\nPGP 7A35090F & Signal Analysis"]
     end
 
@@ -270,15 +270,66 @@ Combinatorial search engine targeting the 512-bit digest on Page 56 / 73:
   - **ICC Profile Segments**: Validates APP2 segment containing profile description string `'Artifex Software 2011'`.
   - **Integrity & Re-encoding Detection**: Computes SHA-1 and SHA-256 digests against published pristine scan hashes; detects altered quantization tables, dimension scaling, or stripped ICC markers.
 
+### 3.20 Spectral S-Box: Differential & Nonlinear S-Box Analysis over $\mathbb{F}_{29}$ (`ciphers/spectral_sbox.py`)
+Comprehensive algebraic and spectral S-box analysis suite operating over $\mathbb{F}_{29}$ and binary vector spaces:
+- **S-Box Generators over $\mathbb{F}_{29}$**: Affine inversion $S(x) = (a \cdot x^{-1} + b) \bmod 29$ ($0^{-1} := 0$), Möbius maps on $\mathbb{P}^1(\mathbb{F}_{29})$ ($cx+d = 0 \mapsto a \cdot c^{-1} \bmod 29$), power maps $x^k \bmod 29$ for $\gcd(k, 28) = 1$, and double-affine compositions $S(x) = (a_2 \cdot S_{\text{base}}((a_1 x + b_1) \bmod 29) + b_2) \bmod 29$.
+- **Cryptographic Diagnostics**:
+  - Difference Distribution Table (DDT) and differential uniformity $\delta = \max_{\Delta x \neq 0, \Delta y} \text{DDT}(\Delta x, \Delta y)$ for both $\mathbb{Z}_{29}$ additive differences and bitwise XOR differences.
+  - Linear Approximation Table (LAT) and Fast Walsh-Hadamard Transform (FWHT) computing Walsh spectrum amplitudes $\mathcal{W}(u, v)$.
+  - Nonlinearity (NL), Strict Avalanche Criterion (SAC), and coordinate Algebraic Degree (AD).
+  - Discrete Fourier Transform bias over $\mathbb{Z}_{29}$ and multi-round Linear Hull Potential computed via correlation matrix powers $C^r$.
+
+### 3.21 Algebraic Cryptanalysis: Macaulay Matrices & XL Solvers over $\mathbb{F}_{29}$ (`ciphers/algebraic.py`)
+Multivariate polynomial algebra and nonlinear recurrence cryptanalysis:
+- **Degrevlex Monomials**: Sparse multivariate polynomial representation in $\mathbb{F}_{29}[x_1, \dots, x_n]$ ordered under degree reverse lexicographical (degrevlex) monomial order.
+- **Macaulay System Expansion**: Generates Macaulay matrices $\mathcal{M}(D)$ across all monomial shifts $\mathbf{x}^{\mathbf{\alpha}} f_i \le D$ over $\mathbb{F}_{29}$.
+- **Gaussian Elimination to RREF**: In-place field reduction to Reduced Row Echelon Form (RREF) using precomputed $\mathbb{F}_{29}$ modular inverse lookup tables.
+- **NLFSR Recurrence Detection**: Fits quadratic and cubic feedback recurrence relations $S_{n+k} = f(S_{n+k-1}, \dots, S_n) \bmod 29$ to candidate sequence fragments, distinguishing NLFSR streams from uniform noise.
+- **SageMath FGLM Bridge**: Automatically exports high-degree or over-dimensioned systems ($D > 3$ or columns $> 2000$) to standalone SageMath FGLM Gröbner basis calculation scripts.
+
+### 3.22 Lattice Reduction: LLL, Coppersmith Small Roots & Knapsack Solvers (`ciphers/lattice.py`)
+Pure-Python lattice basis reduction and algebraic root finding:
+- **Gram-Schmidt & LLL Reduction**: Arbitrary-precision Lenstra–Lenstra–Lovász basis reduction with parameter $\delta = 0.99$ for dimensions up to 40, operating entirely within standard-library `math`.
+- **Coppersmith's Small Roots**: Univariate polynomial small roots modulo $N$ using Howgrave-Graham lattice shifts, finding integer roots $|x_0| \le X$ in polynomial time.
+- **Lagarias-Odlyzko / CJLOSS Knapsack Solver**: Solves low-density subset sum problems targeting the official Gematria Primus prime weights ($2, 3, 5, \dots, 109$).
+- **Integer Relations (PSLQ Analogue)**: Recovers exact small integer linear dependencies $\sum a_i x_i = 0$ for high-precision decimal constants and ratios.
+
+### 3.23 RSA Audit: Comprehensive Factorization & Small Exponent Pipeline (`ciphers/rsa_audit.py`)
+Forensic audit and cryptanalytic attacks targeting RSA public keys and moduli:
+- **Miller-Rabin Primality Certification**: Deterministic certification for 64-bit moduli using 12 certified bases ($\{2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37\}$) and probabilistic rounds ($k \ge 40$) for arbitrary precision.
+- **Fast Factorization Engines**:
+  - Fermat factorization resolving close prime factors with $|p - q| \le O(N^{0.25})$ in sub-millisecond execution.
+  - Pollard's rho algorithm utilizing Brent's cycle detection and batched GCD computation.
+  - Pairwise batch GCD computing $\gcd(N_i, \prod_{j \neq i} N_j)$ across collections of public moduli to detect shared prime entropy flaws.
+- **Small Private Exponent Attacks**:
+  - Wiener's continued fractions attack breaking RSA keys where private exponent $d < \frac{1}{3} N^{0.25}$.
+  - Compact Boneh-Durfee lattice reduction attack for $d < N^{0.292}$.
+  - Shared MSB/LSB hybrid factoring detecting partial key leakage or common prime prefixes.
+
+### 3.24 SAT Oracle: Programmatic DPLL/CDCL Solver with Watched Literals (`ciphers/sat_oracle.py`)
+Pure-Python Boolean satisfiability solver with custom cryptanalytic oracle hooks:
+- **CDCL Engine**: Implements the two-watched-literals scheme, VSIDS decision heuristics, clause learning, and non-chronological backjumping.
+- **Programmatic Oracle Callbacks**: Exposes `oracle_fn(partial_assignment)` allowing Liber Primus cipher models to inspect partial truth assignments during the search tree traversal.
+- **Dynamic Blocking Clause Injection**: Injects conflict clauses on the fly when cryptanalytic invariants (such as Fehu skip parity or syllable structure) are violated, pruning invalid search branches before descent.
+
+### 3.25 ECC Stream: Elliptic Curve Keystream Generator (`ciphers/ecc_stream.py`)
+Short Weierstrass elliptic curve arithmetic and deterministic keystream extraction over prime fields:
+- **Short Weierstrass Arithmetic**: Implements $y^2 = x^3 + ax + b \bmod p$ for prime $p \ge 5$, strictly enforcing the non-singularity condition $\Delta = -16(4a^3 + 27b^2) \not\equiv 0 \pmod p$.
+- **Complete Group Law**: Affine point addition, doubling, negation, identity handling ($\mathcal{O}$ / `None`), and scalar multiplication $k \cdot P$ using double-and-add.
+- **Order Bounds & Point Counting**: Evaluates Hasse's theorem bounds ($|\#E(\mathbb{F}_p) - (p+1)| \le 2\sqrt{p}$), Tonelli-Shanks modular square roots, and naive point counting on small fields.
+- **Keystream Extraction**: Generates pseudorandom keystreams by extracting $x(kP) \bmod 29$ and $y(kP) \bmod 29$ across $\mathbb{F}_{29}$ and canonical Cicada primes ($p = 3301, 1033, 761$), with streaming encryption and decryption helpers in Futhorc rune space.
+
 ---
 
 ## 4. Signal Intelligence & OpSec Verification
 
-### 4.1 Cicada 3301 PGP Signature Verification (`ciphers/opsec.py`)
+### 4.1 Cicada 3301 PGP Signature Verification & Cryptographic Audit (`ciphers/opsec.py`)
 Cicada 3301 established that any communication not signed with their official PGP key is counterfeit.
 - **PGP Block Inspection**: Detects armored ASCII PGP messages and signatures.
-- **Key Authentication**: Verifies references and signatures against the official Cicada 3301 PGP Key ID `7A35090F` and full fingerprint `853F 5664 D046 F538 E6F5 6F14 4D2A 92E8 7A35 090F`.
+- **Key Authentication**: Verifies references and signatures against the official Cicada 3301 PGP Key ID `7A35090F` and full fingerprint `6D85 4CD7 9333 22A6 01C3 286D 181F 01E5 7A35 090F`.
 - **File Header Magic Bytes**: Inspects file headers to identify file formats (PNG, JPEG, GIF, PDF, ZIP, ELF, Mach-O, Windows PE) and flags potential steganography containers.
+- **Binary Spectral (WHT / DDT) Diagnostics**: Computes Fast Walsh-Hadamard Transforms (FWHT) and XOR Difference Distribution Tables (DDT) on S-boxes and byte sequences to audit nonlinearity and differential uniformity.
+- **RSA Modulus & PGP Key Audit**: Runs the full RSA audit pipeline (Miller-Rabin, Fermat close primes, Pollard's rho, Wiener continued fractions) on extracted PGP public key moduli.
 
 ### 4.2 Shannon Entropy & Signal Profiling (`ciphers/entropy.py`)
 Calculates information density to distinguish plaintext from encrypted or compressed data.
@@ -458,14 +509,14 @@ python3 trithemius.py --low-spec --ollama-host http://remote-gpu:11434 ask "What
 
 ## 10. Automated Test & Regression Baseline
 
-The test suite contains 367 automated unit and regression tests executing across 39 test modules:
+The test suite contains 458 automated unit and regression tests executing across 46 test modules:
 - **Canonical Solvers & Solved Pages**:
   - `tests/test_canonical_solved_pages.py` (35 tests): Validates exact solutions for all 9 historically solved Liber Primus pages against wiki reference plaintext.
   - `tests/test_solved_pages.py` (33 tests): Validates deterministic end-to-end execution of canonical Liber Primus solvers.
   - `tests/test_exact_solver_and_statistical_rigor.py` (10 tests): Validates exact mathematical bounds and statistical rigor.
   - `tests/test_cryptanalyze_page56.py` (9 tests): Validates Page 56 cascade cryptanalysis and totient stream pipelines.
 - **Advanced Cryptanalysis, Statistical Rigor & GF(29) Taxonomy**:
-  - `tests/test_cryptanalysis_taxonomy.py` (13 tests): Validates calibrated GF(29) language models, statistical triage, consensus period detection, difference periodograms, separable T-tables, Berlekamp–Massey linear complexity, stream hash bank matching, surrogate shuffle tests, and full cascade solvers.
+  - `tests/test_cryptanalysis_taxonomy.py` (16 tests): Validates calibrated GF(29) language models, statistical triage, consensus period detection, difference periodograms, separable T-tables, Berlekamp–Massey linear complexity, stream hash bank matching, fuzzy OEIS sequence matching, S-box sweeps, ECC keystream sweeps, surrogate shuffle tests, and full cascade solvers.
   - `tests/test_taxonomy_hybrid_model.py` (3 tests): Validates hybrid GF(29) language models and smoothed transition matrices.
   - `tests/test_al_kindi_statistical_rigor.py` (5 tests): Validates chi-squared goodness-of-fit, English n-gram likelihoods, and composite verdicts.
   - `tests/test_sprt.py` (4 tests): Validates Wald's Sequential Probability Ratio Test early-stopping decision boundaries.
@@ -474,6 +525,14 @@ The test suite contains 367 automated unit and regression tests executing across
   - `tests/test_unicity.py` (4 tests): Validates Shannon unicity distance and language redundancy bounds.
   - `tests/test_affine.py` (5 tests): Validates canonical reduction of modular transformations over $\text{Aff}(\mathbb{Z}_{29})$.
   - `tests/test_entropy_z29.py` (4 tests): Validates entropy profiling and signal classification.
+- **Phase 2 Cryptanalysis, Lattices, SAT & Number Theory**:
+  - `tests/test_spectral_sbox.py` (12 tests): Validates affine inversion, Möbius maps, power maps, double-affine compositions, DDT, differential uniformity, FWHT, LAT, nonlinearity, SAC, algebraic degree, and linear hull potential.
+  - `tests/test_algebraic_macaulay.py` (15 tests): Validates degrevlex polynomials, Macaulay matrix shifts, Gaussian elimination RREF, NLFSR recurrence detection, and SageMath FGLM export.
+  - `tests/test_lattice_and_rsa.py` (21 tests): Validates Gram-Schmidt, LLL basis reduction, Howgrave-Graham small roots, Lagarias-Odlyzko knapsack subset sum, PSLQ integer relations, Miller-Rabin certified bases, Fermat close primes, Pollard's rho, Wiener continued fractions, Boneh-Durfee, and batch GCD.
+  - `tests/test_sat_oracle.py` (10 tests): Validates CDCL SAT solving with watched literals, programmatic oracle callbacks, and Fehu interrupt pruning via blocking clauses.
+  - `tests/test_ecc_stream.py` (8 tests): Validates short Weierstrass elliptic curve arithmetic over F_p, non-singularity, point addition/doubling, scalar multiplication, Hasse theorem bounds, and keystream extraction over F_29 and Cicada primes (3301, 1033, 761).
+  - `tests/test_dee_rsa_protocol.py` (8 tests): Validates n>=100 benchmarking, latency measurement, peak memory tracemalloc, 95% CI, and hardware vs pure-Python baselines.
+  - `tests/test_liberprayground_heuristics.py` (13 tests): Validates difference IoC, pattern IoC, 10-point reproducibility manifests, 8-point claim checklists, and 3-dot rune normalization.
 - **Ciphers, Keystreams, Interrupters & Key Management**:
   - `tests/test_interrupter.py` (11 tests): Validates canonical 29-rune alphabet integrity, mathematical key shifts (DIVINITY, FIRFUMFERENFE), and bidirectional dynamic interrupter execution.
   - `tests/test_running_key.py` (17 tests): Validates GF(29) running key and book cipher engines with Fehu-skip support.
@@ -486,7 +545,7 @@ The test suite contains 367 automated unit and regression tests executing across
   - `tests/test_metal_accel.py` (10 tests): Validates Apple Silicon Metal GPU compute engine with graceful CPU fallback.
   - `tests/test_level1_optimizations.py` (15 tests): Validates Level 1 canonical deduplication and SQLite ledger migrations.
 - **Containers, Layout & Forensic Metadata**:
-  - `tests/test_container_and_metadata.py` (10 tests): Validates JPEG/PNG/GIF/ZIP/PDF container grammar and overlay extraction.
+  - `tests/test_container_and_metadata.py` (11 tests): Validates JPEG/PNG/GIF/ZIP/PDF container grammar, overlay extraction, and OpSec binary WHT/DDT & RSA audits.
   - `tests/test_layout.py` (11 tests): Validates layout side-channel mutual information and permutation testing.
   - `tests/test_provenance.py` (4 tests) & `tests/test_evidence.py` (3 tests): Validates forensic metadata provenance.
   - `tests/test_corpus_enumeration.py` (5 tests) & `tests/test_vector_attempts.py` (7 tests): Validates corpus integrity and vector storage.
@@ -500,7 +559,7 @@ The test suite contains 367 automated unit and regression tests executing across
   - `tests/test_golden_master.py` (2 tests): Validates byte-level output consistency across CLI and REPL sessions against golden master references.
   - `tests/test_architecture.py` (4 tests), `tests/test_domain_services.py` (3 tests), `tests/test_import_determinism.py` (3 tests): Validates clean architectural boundaries, zero circular dependencies, and deterministic imports.
 
-Running the full suite across all 39 modules:
+Running the full suite across all 46 modules:
 ```bash
 ./venv/bin/python -m unittest discover -s tests
 # Alternatively, via system Python:

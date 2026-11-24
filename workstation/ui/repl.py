@@ -232,6 +232,7 @@ def run_repl(self):
                         compound = False
                         randomize = False
                         rotations = False
+                        include_ecc = False
                         use_metal = True
                         use_ane = True
                         clean_args = []
@@ -246,6 +247,8 @@ def run_repl(self):
                                     randomize = True
                                 elif norm_flag in ("rotations", "rotation", "rot", "rots"):
                                     rotations = True
+                                elif norm_flag in ("include-ecc", "ecc"):
+                                    include_ecc = True
                                 elif norm_flag in ("no-metal", "nometal"):
                                     use_metal = False
                                 elif norm_flag in ("no-ane", "noane"):
@@ -258,7 +261,7 @@ def run_repl(self):
                                 clean_args.append(a)
 
                         if not clean_args:
-                            print("Usage: /crack <text_or_page> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]\n")
+                            print("Usage: /crack <text_or_page> [--deep] [--compound] [--random] [--rotations] [--include-ecc] [--no-metal] [--no-ane]\n")
                         else:
                             target = " ".join(clean_args)
                             res = self.run_crack(
@@ -269,6 +272,7 @@ def run_repl(self):
                                 include_rotations=rotations,
                                 use_metal=use_metal,
                                 use_ane=use_ane,
+                                include_ecc=include_ecc,
                             )
                             self.print_crack(res)
 

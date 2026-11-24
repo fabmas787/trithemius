@@ -19,8 +19,22 @@ import time
 import hashlib
 import sqlite3
 from typing import Optional, List, Dict, Tuple, Any
-import ollama
-import chromadb
+try:
+    import ollama
+except ImportError:
+    class _OllamaStub:
+        @staticmethod
+        def embeddings(*args, **kwargs):
+            raise RuntimeError("Ollama not installed")
+        @staticmethod
+        def chat(*args, **kwargs):
+            raise RuntimeError("Ollama not installed")
+    ollama = _OllamaStub()
+
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import config

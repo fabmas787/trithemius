@@ -173,6 +173,7 @@ class TerminalWorkstation:
         compound: bool = False,
         use_metal: bool = True,
         use_ane: bool = True,
+        include_ecc: bool = False,
     ) -> CrackResult:
         return self.ciphers.run_crack(
             target,
@@ -185,6 +186,7 @@ class TerminalWorkstation:
             compound=compound,
             use_metal=use_metal,
             use_ane=use_ane,
+            include_ecc=include_ecc,
         )
 
     def run_triage(self, target: str) -> TriageResult:
