@@ -30,7 +30,8 @@
 - `trithemius.py`: CLI entrypoint and backward-compatible facade.
 - `workstation/`: Core workstation kernel, domain services, UI renderers, and CLI/REPL routers.
 - `ciphers/`: GF(29) taxonomy, Gematria Primus, Vigenère mod-29, ANE/Metal acceleration, OpSec verification.
-- `scripts/`: Corpus librarians (`porta.py`, `bodleian.py`), RAG retriever (`ask.py`), web scout (`walsingham.py`), benchmarking (`benchmark.py`).
+- `scripts/`: Corpus librarians (porta.py, bodleian.py), partitioning (split_master_transcript.py), RAG retriever (ask.py), solvers & cryptanalysis (solve_canonical.py, totient_stream.py, cryptanalyze_page56.py), rune normalizer (normalize_runes.py), benchmarking (benchmark.py).
+- `agents/`: Multi-agent orchestration (crew.py, duel.py), Bayesian epistemic evidence ledger (evidence.py, ledger.py), and regression runner (regress.py).
 - `corpus/`: Page transcripts, indexes, and reference literature (`corpus/reference_texts/`).
 - `vectordb/`: Persistent ChromaDB embeddings and canonical hypothesis ledgers.
-- `tests/`: 367 unit tests, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).
+- `tests/`: 367 unit tests across 39 test suites, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).

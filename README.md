@@ -10,47 +10,56 @@ Each module is named after a historical cryptographer, philosopher, or scholar w
 - **Al-Kindi** (Abu Yusuf Al-Kindi, 801–873): Inventor of frequency analysis — Chi-squared & quadgram statistical gatekeeper.
 - **Bodley** (Sir Thomas Bodley, 1545–1613): Founder of the Bodleian Library — Page-aware chunking & ChromaDB vector ingestion.
 - **Porta** (Giambattista della Porta, 1535–1615): Renaissance author of *De Furtivis Literarum Notis* — Corpus classifier, standardized renaming & deduplication.
-- **Walsingham** (Sir Francis Walsingham, 1532–1590) `[ARCHIVIATO / ROADMAP COMPONENT]`: Spymaster to Queen Elizabeth I — Autonomous web scout (archiviato, sostituito dalla pipeline offline Bodleian + Porta + RAG).
-- **Bacon** (Roger Bacon, 1220–1292) `[ARCHIVIATO / ROADMAP COMPONENT]`: Medieval empiricist — Live DuckDuckGo search context injection.
+- **Walsingham** (Sir Francis Walsingham, 1532–1590) `[ARCHIVIATO]`: Spymaster di Elisabetta I — Web scout autonomo (archiviato e sostituito stabilmente dalla pipeline deterministica offline Bodleian + Porta + RAG).
+- **Bacon** (Roger Bacon, 1220–1292) `[ARCHIVIATO]`: Empirista medievale — Iniezione di contesto da ricerche web live (archiviato; il comando `/web` opera ora come interrogazione RAG sul corpus offline).
 
 ---
 
 ## Architecture Overview
 
 ```
-[Web / Archivio Storico] ──► [scripts/walsingham.py] [ARCHIVIATO / ROADMAP]
-                                                    │
-                                                    ▼
-                                           [corpus/ Directory]
-                                                    │
-                   ┌────────────────────────────────┼────────────────────────────────┐
-                   ▼                                ▼                                ▼
-         [scripts/porta.py]               [scripts/bodleian.py]              [ciphers/opsec.py]
-      (Classifica & Rinomina, 0 VRAM)   (Chunking Entropia & ChromaDB)       (Verifica PGP 7A35090F)
-                                                    │
-                                                    ▼
-                                          [vectordb/ (ChromaDB)]
-                                                    │
-                                                    ▼
-                                  [Trithemius Terminal Workstation]
-                                           (trithemius.py)
-                                       SparkLLM / DeepSeek MoE
+[Master Transcript & Corpus Curato] ──► [scripts/split_master_transcript.py]
+                                                          │
+                                                          ▼
+                                                 [corpus/ Directory]
+                                                          │
+                         ┌────────────────────────────────┼────────────────────────────────┐
+                         ▼                                ▼                                ▼
+               [scripts/porta.py]               [scripts/bodleian.py]              [ciphers/opsec.py]
+            (Classifica & Rinomina, 0 VRAM)   (Chunking Entropia & ChromaDB)       (Verifica PGP 7A35090F)
+                                                          │
+                                                          ▼
+                                                [vectordb/ (ChromaDB)]
+                                                          │
+                                                          ▼
+                                        [Trithemius Terminal Workstation]
+                                                 (trithemius.py)
+                                             SparkLLM / DeepSeek MoE
 ```
 
-1. **trithemius.py** — Unified terminal-first cryptanalytic workstation (interactive REPL + CLI subcommands).
-2. **corpus/** — Raw text: page transcripts, forum threads, reference index (`pages_index.json`).
-3. **scripts/walsingham.py** `[ARCHIVIATO / ROADMAP COMPONENT]` — Autonomous web scout con anti-bot resilience (archiviato, sostituito stabilmente dalla pipeline locale deterministica Bodleian + Porta + RAG).
-4. **scripts/porta.py** — Corpus librarian (identifies page numbers, standardizes filenames, removes duplicates).
-5. **scripts/bodleian.py** — Shannon entropy sliding-window chunking, rune detection, and ChromaDB vector ingestion.
-6. **scripts/ask.py** — Hybrid RAG query engine with streaming token output and page filtering (`/page 56`).
-7. **scripts/normalize_runes.py** — Futhorc rune standardization (`᛫`, `᛬`, `᛭`) and OCR cleaner.
-8. **ciphers/agrippa.py** — Official 29-rune Gematria Primus mapping, prime values (2..109), word sums, rune Atbash, Euler's totients.
-9. **ciphers/kasiski.py** — Modulo-29 Rune Vigenère solver, Cicada keystreams (primes, Fibonacci, totients), English IoC + Friedman test.
-10. **ciphers/al_kindi.py** — Chi-squared goodness-of-fit, English quadgram/trigram likelihood, dictionary vocabulary validation.
-11. **ciphers/taxonomy.py** (+ 14 moduli ciphers) — Suite tassonomica avanzata GF(29), modelli linguistici calibrati, periodogrammi, T-table solver, crib dragging, surrogate tests, e i moduli `unicity`, `sprt`, `difference`, `lagcoinc`, `interrupter`, `running_key`, `affine`, `fingerprint`, `container`, `layout`, `lexicon`, `zimmermann`, `keymap`, `hash_hunt`.
-12. **ciphers/metal_accel.py & ane_engine.py** — Accelerazione hardware opzionale Apple Silicon Metal GPU e Apple Neural Engine (ANE CoreML) con fallback trasparente su CPU.
-13. **ciphers/entropy.py & opsec.py** — Shannon entropy $H(X)$, sliding-window boundary cuts, feature vector $\vec{F}$, verifica PGP Cicada `7A35090F`.
-14. **archive/gui/** — Archived browser interface and legacy HTTP daemon.
+> [!NOTE]
+> **Architettura 100% Offline e Deterministica**: Gli strumenti storici di web scraping (`scripts/walsingham.py`) e ricerca web live (`scripts/bacon.py`) sono stati archiviati e sostituiti stabilmente dalla pipeline deterministica offline **Bodleian + Porta + RAG**. Il comando `/web` della workstation è un alias diretto per l'interrogazione RAG del corpus locale indicizzato, garantendo confidenzialità crittografica (OpSec), assenza di latenze di rete e riproducibilità scientifica assoluta.
+
+1. **trithemius.py** — Workstation crittanalitica terminal-first unificata (shell interattiva REPL + comandi diretti CLI).
+2. **corpus/** — Testi grezzi: trascrizioni delle pagine, indice dei riferimenti (`pages_index.json`) e letteratura filosofica di confronto (`reference_texts/`).
+3. **scripts/split_master_transcript.py** — Utility di partizionamento del transcript master runico del Liber Primus in pagine runiche standardizzate con preservazione dei delimitatori.
+4. **scripts/porta.py** — Bibliotecario del corpus (identificazione numeri di pagina, standardizzazione dei nomi file, rimozione duplicati a 0% VRAM).
+5. **scripts/bodleian.py** — Chunking a finestra scorrevole basato su entropia di Shannon, rilevamento rune e ingestione vettoriale in ChromaDB.
+6. **scripts/ask.py** — Motore di interrogazione RAG ibrido con token streaming e filtro per pagina (`/page 56`).
+7. **scripts/normalize_runes.py** — Normalizzazione dei caratteri runici Futhorc (`᛫`, `᛬`, `᛭`) e pulizia OCR.
+8. **scripts/solve_canonical.py** — Risolutore e verificatore stand-alone per tutte le 9 pagine storicamente risolte del Liber Primus.
+9. **scripts/totient_stream.py** — Utility stand-alone per il cifrario a flusso basato sui totienti di Eulero dei numeri primi sacri ($\phi(p) = p - 1 \pmod{29}$) con gestione pause Fehu (F-skip).
+10. **scripts/cryptanalyze_page56.py** — Cascade solver e analisi esaustiva per la Pagina 56 / 73 (ipotesi totienti, orbite di Pisano in $\mathbb{F}_{29}$, interrupter Vigenère e logging su ledger SQLite).
+11. **scripts/benchmark.py** — Benchmarking cProfile, baseline comparison e test di latenza per primitive crittografiche.
+12. **ciphers/agrippa.py** — Mappatura ufficiale Gematria Primus a 29 rune, valori primi sacri (2..109), somme di parole, Atbash runico, totienti di Eulero.
+13. **ciphers/kasiski.py** — Risolutore Vigenère modulo-29 in $\mathbb{F}_{29}$, keystream canonici Cicada (primi, Fibonacci, totienti), Indice di Coincidenza (IoC) e test di Friedman.
+14. **ciphers/al_kindi.py** — Chi-quadro goodness-of-fit, verosimiglianza logaritmica quadgrammi/trigrammi inglesi, validazione del vocabolario dizionario.
+15. **ciphers/taxonomy.py** (+ 14 moduli ciphers) — Suite tassonomica avanzata GF(29), modelli linguistici calibrati, periodogrammi, T-table solver, crib dragging, test surrogati Monte Carlo, e moduli `unicity`, `sprt`, `difference`, `lagcoinc`, `interrupter`, `running_key`, `affine`, `fingerprint`, `container`, `layout`, `lexicon`, `zimmermann`, `keymap`, `hash_hunt`.
+16. **ciphers/solved_pages.py** — Implementazioni canoniche verificate delle 9 pagine risolte secondo la documentazione storica del wiki Uncovering Cicada.
+17. **ciphers/provenance.py** — Validatore forense per scansioni originali del manoscritto (geometria 2400x3600, JFIF 400 DPI, profilo ICC Artifex, tabelle di quantizzazione).
+18. **ciphers/metal_accel.py & ane_engine.py** — Accelerazione hardware opzionale Apple Silicon Metal GPU e Apple Neural Engine (ANE CoreML) con fallback trasparente su CPU.
+19. **ciphers/entropy.py & opsec.py** — Entropia di Shannon $H(X)$, tagli di confine a finestra mobile, feature vector $\vec{F}$, verifica crittografica chiave PGP Cicada `7A35090F`.
+20. **agents/** — Suite di orchestrazione multi-agente (`crew.py`, `duel.py`), Bayesian epistemic evidence ledger (`evidence.py`, `ledger.py`) e regression runner (`regress.py`).
 
 ---
 
@@ -63,10 +72,11 @@ Trithemius include **script di installazione e avvio automatizzati (1-click)** s
 ### 🍎 Installazione su macOS (Apple Silicon M-Series o Intel)
 
 #### 1. Prerequisiti
-- **Python 3.10+**: Consigliato tramite Homebrew:
+- **Python $\ge 3.10$**: È richiesta una versione di Python $\ge 3.10$ (consigliato Python 3.11 tramite Homebrew per compatibilità e performance ottimali):
   ```bash
   brew install python@3.11
   ```
+- **NumPy $\ge 1.24.0$**: Necessario per abilitare l'accelerazione hardware Apple Silicon Metal GPU, l'Apple Neural Engine (ANE CoreML) e il calcolo FFT lag coincidence.
 - **Ollama**: Scaricalo da [ollama.com](https://ollama.com/download) o via Homebrew:
   ```bash
   brew install ollama
@@ -79,7 +89,7 @@ Dalla cartella del progetto nel Terminale, esegui:
 ./install.sh
 ```
 Lo script si occuperà di:
-- Verificare la versione di Python idonea.
+- Verificare la versione di Python idonea ($\ge 3.10$).
 - Creare l'ambiente virtuale isolato `venv/`.
 - Installare tutte le dipendenze da `requirements.txt`.
 - Scaricare automaticamente i modelli Ollama (`nomic-embed-text` e `SparkLLM/Spark-X2.5-4B`).
@@ -95,8 +105,9 @@ Per avviare la Workstation direttamente nel Terminale:
 ### 🪟 Installazione su Windows (10/11 - NVIDIA o CPU)
 
 #### 1. Prerequisiti
-- **Python 3.10+**: Scarica l'installer da [python.org/downloads](https://www.python.org/downloads/).
+- **Python $\ge 3.10$**: Scarica l'installer da [python.org/downloads](https://www.python.org/downloads/).
   > ⚠️ **FONDAMENTALE**: Durante l'installazione di Python, spunta la casella **"Add python.exe to PATH"**!
+- **NumPy $\ge 1.24.0$**: Consigliato per le ottimizzazioni vettoriali e i calcoli crittanalitici ad alta velocità.
 - **Ollama for Windows**: Scarica ed esegui l'installer ufficiale da [ollama.com/download/windows](https://ollama.com/download/windows).
 
 #### 2. Installazione Automatizzata (1-Click)
@@ -107,7 +118,7 @@ install.bat
 *(Oppure aprilo dal Prompt dei Comandi / PowerShell digitando `install.bat`)*
 
 Lo script:
-- Rileva Python su Windows.
+- Rileva Python su Windows ($\ge 3.10$).
 - Crea l'ambiente virtuale `venv\`.
 - Installa tutte le librerie necessarie (`requirements.txt`).
 - Effettua il pull dei modelli in Ollama.
@@ -126,7 +137,7 @@ Si aprirà la Workstation interattiva direttamente nel Prompt dei Comandi / Term
 Se preferisci procedere manualmente da terminale:
 
 ```bash
-# 1. Crea ed attiva il virtual environment
+# 1. Crea ed attiva il virtual environment (Python >= 3.10 richiesto)
 # Su macOS/Linux:
 python3 -m venv venv
 source venv/bin/activate
@@ -135,20 +146,28 @@ source venv/bin/activate
 python -m venv venv
 venv\Scripts\activate
 
-# 2. Installa le dipendenze
+# 2. Installa le dipendenze base
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 3. Scarica i modelli in Ollama
+# 3. Installa NumPy per accelerazione hardware (Metal GPU, ANE, FFT lag coincidence)
+pip install "numpy>=1.24.0"
+
+# 4. Scarica i modelli in Ollama
 ollama pull nomic-embed-text
 ollama pull SparkLLM/Spark-X2.5-4B
 
 # Modello MoE complementare opzionale:
 ollama pull deepseek-coder-v2:16b
 
-# 4. Avvia la Terminal Workstation
+# 5. Avvia la Terminal Workstation
 python trithemius.py
 ```
+
+> [!IMPORTANT]
+> **Compatibilità Python & Accelerazione Hardware**:
+> - **Python $\ge 3.10$**: L'intero codice sorgente fa uso di type hint generici avanzati (es. `frozenset[str]`) e aritmetica modulare nativa moderna (es. inversione modulare `pow(base, -1, mod)`), richiedendo inderogabilmente Python versione 3.10 o superiore.
+> - **NumPy $\ge 1.24.0$**: Il pacchetto `numpy>=1.24.0` è richiesto per sbloccare l'accelerazione compute shader Metal su GPU Apple Silicon, per il backend Apple Neural Engine (ANE CoreML) e per i calcoli FFT di autocorrelazione e lag coincidence. In assenza di NumPy, la workstation esegue automaticamente il fallback su implementazioni scalari in puro Python standard library.
 
 ---
 
@@ -164,56 +183,88 @@ python3 trithemius.py
 Verrà avviata la shell interattiva con prompt `trithemius>` e completamento automatico da tastiera (tasto Tab).
 
 ### 2. Le Funzionalità Principali della Workstation:
-- **💬 RAG Assistant (Chat Live & Query)**:
-  - Interroga il corpus vettoriale con risposta in streaming token-by-token.
-  - Scegli tra **SparkLLM** (default 4B con 1M di contesto) o **DeepSeek-Coder-V2** (MoE).
-  - Comandi rapidi nella shell:
-    - `/ask Come si decifra la pagina 56?` $\to$ ricerca ibrida BM25 e vettoriale.
-    - `/page 56` $\to$ ispezione del testo sorgente e anteprima dei documenti.
-    - `/web latest theories 2026` $\to$ interroga contemporaneamente il web tramite Bacon.
-- **ᚠ Gematria & Ciphers Workbench**:
-  - `/gematria <testo>`: traslitterazione bidirezionale latino/rune Futhorc, somma dei valori primi (2..109), totiente di Eulero $\phi(n)$ e primalità.
-  - `/vigenere dec 56 DIVINITY`: decodifica e codifica Vigenère in $\mathbb{F}_{29}$ con plausibilità Al-Kindi.
-  - `/atbash <target>`: cifrario Atbash speculare in $\mathbb{F}_{29}$ con shift facoltativo.
-  - `/solve <pagina>`: esecuzione immediata dei risolutori canonici verificati.
-  - `/crack <target>`: triage statistico automatico, cascata di risolutori e scoring su Apple Neural Engine / Metal.
-- **🛡️ OpSec & PGP 7A35090F**:
-  - `/opsec <file>`: verifica crittografica dell'autenticità PGP contro la chiave ufficiale `7A35090F`.
-  - Calcola in tempo reale il profilo del segnale: entropia di Shannon $H(X)$, Indice di Coincidenza (IoC) e rune.
-- **📁 Gestione Corpus & Telemetria**:
-  - `/organize`: deduplica e indicizza i file in `corpus/` spostando i duplicati in `_duplicates/`.
-  - `/ingest`: frammentazione ed embedding vettoriale con Bodleian.
-  - `/status`: telemetria hardware, provider attivo, chunk indicizzati e stato PGP.
-  - Output JSON: per script automatici o pipeline headless, usa `--json` (es. `python trithemius.py status --json`).
+- **💬 RAG Assistant & Navigazione Corpus (Knowledge Engine)**:
+  - `/ask [--fresh] <query>`: Interrogazione ibrida dense vector (ChromaDB) e BM25 zero-VRAM con routing deterministico per trascrizioni di pagine ed espansioni Gematria Primus.
+  - `/web <query>`: Interrogazione del corpus offline curato via RAG (alias rapido, nessuna dipendenza da web scraping live).
+  - `/page <numero>`: Ispezione della trascrizione originale, anteprima dei metadati e del testo runico di una pagina (es. `/page 56`, `/page 00`, `/page 73`).
+- **ᚠ Gematria & Cifrari Canonici (Sacred Numerology & Classical Solvers)**:
+  - `/gematria <testo>`: Traslitterazione bidirezionale latino/rune Futhorc, somma dei valori primi sacri (2..109), test di primalità, fattorizzazione, totiente di Eulero $\phi(n)$ e riflessione speculare Atbash.
+  - `/atbash <target> [--shift N]`: Cifrario Atbash in $\mathbb{F}_{29}$ con Caesar shift facoltativo (es. `/atbash 00`, `/atbash 06 --shift 3` per Koan 1).
+  - `/vigenere <enc|dec> <target> <chiave> [--f-skip]`: Cifrario Vigenère in $\mathbb{F}_{29}$ o mod-26 latino con pause del keystream sui caratteri Fehu (F-skip) e verifica statistica Al-Kindi.
+  - `/totient-stream` (o `/totient`) `<enc|dec> <target> [--offset N] [--f-skip]`: Cifrario a flusso basato sui totienti di Eulero $\phi(p_k) = p_k - 1 \pmod{29}$, con gestione offset e pause Fehu (es. `/totient-stream dec 71 --f-skip`).
+  - `/solve [target|all]`: Esecuzione e verifica immediata delle 9 pagine canoniche risolte del Liber Primus (es. `/solve welcome`, `/solve 71`, `/solve all`).
+- **🔬 Crittanalisi Avanzata & Analisi Statistica**:
+  - `/crack <target> [--deep] [--compound] [--rotations]`: Cascade solver esaustivo con triage unigram/bigram, stima periodo, T-table coordinate optimization, sweeps Metal GPU di frasi composte e reranking semantico CoreML ANE.
+  - `/triage <target>`: Triage statistico per classificazione della famiglia di cifrario (unigram IC, normalized kappa $29 \cdot \text{IC}$, bigram IC, entropia condizionale).
+  - `/period <target> [max_period]`: Stima consensuale della lunghezza chiave combinando Kasiski weighted GCD voting, periodogramma di differenze comb filter e column IoC.
+  - `/crib <target> <crib_word>`: Crib dragging lungo il testo cifrato con calcolo della complessità lineare Berlekamp-Massey in $\mathbb{F}_{29}$ e matching su stream hash bank.
+  - `/layout [target|calibrate]`: Analisi della mutua informazione del layout (lunghezze parole/righe, separatori `᛫`, `᛬`, `᛭`, posizioni Fehu) con correzione Miller-Madow e calibrazione su pagine risolte.
+  - `/running-key <page> <file> [--mode sub|add|beaufort] [--f-skip]`: Decifrazione running-key in $\mathbb{F}_{29}$ contro testi letterari di riferimento (es. Blake, Emerson).
+  - `/running-key-scan <page> [--step N] [--top-k N]`: Scansione sliding-window automatica su tutte le opere in `corpus/reference_texts/` con scoring runico calibrato.
+  - `/lexicon [phrases|words|all]`: Esplorazione del vocabolario filosofico, aforismi e parole chiave master per attacchi dizionario e crib.
+- **🛡️ OpSec, Ledger Epistemico & Telemetria Hardware**:
+  - `/opsec <target>`: Autenticazione crittografica della firma PGP Cicada `7A35090F`, profilo entropico $H(X)$, Indice di Coincidenza (IoC) e rilevamento steganografico.
+  - `/ledger [target]`: Ispezione del ledger persistente SQLite e ChromaDB con deduplicazione tentativi e ricerca per similarità coseno nearest-neighbor.
+  - `/hardware` (alias `/gpu`, `/metal`, `/ane`): Telemetria e benchmark throughput per Apple Silicon Metal GPU (M chiavi/sec) e Apple Neural Engine (ANE).
+  - `/boost [on|off|status|toggle]`: Modalità crittanalitica potenziata (espande il retrieval a 10 chunk, moltiplica lo score lessicale runico per $2.0\times$, estende il contesto a 4.000 caratteri).
+  - `/bench [--profile] [--skip-vector] [--llm]`: Suite di benchmark per la misura delle latenze al microsecondo delle primitive crittografiche e profiling cProfile.
+  - `/key [show|clear|<provider> <key>]`: Gestione sicura delle credenziali API salvate in `.env` con permessi restrittivi `0600`.
+  - `/status [--probe]`: Telemetria real-time di sistema, provider LLM attivo, stato CoT, conteggio chunk vettoriali e identità PGP.
+  - Output JSON: Per script automatici o integrazioni headless, aggiungi il flag `--json` (es. `python trithemius.py status --json`, `python trithemius.py crack 56 --json`).
 
 ---
 
-## GUIDA 2: Utilizzo del Solo Web Scraper Autonomo (`walsingham.py`) [ARCHIVIATO / ROADMAP COMPONENT]
+## GUIDA 2: Pipeline di Cifratura e Risolutori Canonici (`solve_canonical.py`, `totient_stream.py`, `cryptanalyze_page56.py`)
 
 > [!NOTE]
-> **Nota Architetturale**: Lo script `scripts/walsingham.py` è archiviato (`[ARCHIVED / ROADMAP COMPONENT]`) ed è stato sostituito dalla pipeline deterministica e offline **Bodleian + Porta + RAG**. L'acquisizione, la deduplicazione e l'ingestione del corpus operano ora al 100% in locale senza dipendenze da scraping web esterno. Questa sezione è conservata a fini di riferimento storico e architetturale.
+> **Nota Architetturale**: Lo web scraping autonomo (`scripts/walsingham.py`) e l'iniezione dinamica di ricerche web esterne (`scripts/bacon.py`) sono stati archiviati in favore del corpus offline curato e deterministico del Liber Primus (`corpus/` e master transcript). Questa guida illustra l'utilizzo pratico dei risolutori e strumenti crittanalitici autonomi operanti al 100% in locale.
 
-Se vuoi raccogliere trascrizioni runiche, indizi e discussioni dal web **senza sprecare risorse e senza avviare alcun modello LLM in VRAM (0% VRAM)**:
+La workstation include script stand-alone per la verifica formale, la decodifica di flussi totienti e la crittanalisi avanzata a cascata:
 
-### Caratteristiche Anti-Bot di Walsingham:
-1. **Rotazione User-Agent & Header completi**: alterna impronte digitali di browser reali (Chrome, Safari, Firefox, Edge).
-2. **Backoff con Jitter**: su risposte `429 (Rate Limit)` o `503`, attende un intervallo casuale esponenziale e riprova.
-3. **Circuit Breaker Anti-Crash**: se un sito è protetto da Cloudflare Turnstile/403 o va in timeout, **salta la risorsa senza mai interrompere lo script**.
-4. **Accesso Raw Prioritario**: scarica direttamente dai repository GitHub raw dei solver (`raw.githubusercontent.com`), bypassando i firewall anti-scraping.
-5. **Filtro di Qualità**: accetta solo contenuti contenenti rune Futhorc, blocchi PGP `7A35090F`, o parole chiave del Liber Primus, convertendo l'HTML in Markdown pulito.
-
-### Comandi CLI:
+### 1. Suite Canonica di Risoluzione (`solve_canonical.py`)
+Verifica e riproduce fedelmente tutte le 9 pagine storicamente risolte del Liber Primus documentate dalla community crittografica:
 ```bash
-# Esecuzione standard con query predefinita (scarica fino a 3 file rilevanti in corpus/):
-python3 scripts/walsingham.py
+# Esegue la verifica formale di tutte le 9 pagine canoniche:
+python3 scripts/solve_canonical.py
 
-# Ricerca specifica per una pagina del Liber Primus:
-python3 scripts/walsingham.py --query "cicada 3301 page 56 rune transcription"
+# Risolve ed ispeziona una pagina specifica (es. Welcome o Pagina 56 / An End):
+python3 scripts/solve_canonical.py welcome
+python3 scripts/solve_canonical.py 56
 
-# Impostare un limite di file da scaricare:
-python3 scripts/walsingham.py --query "liber primus solutions github raw" --limit 5
+# Esporta i risultati in formato strutturato JSON per pipeline headless:
+python3 scripts/solve_canonical.py --json
 ```
-I file scaricati vengono salvati direttamente nella cartella `corpus/`, pronti per l'ingestion.
+
+### 2. Risolutore Prime Totient Stream con F-Skips (`totient_stream.py`)
+Implementa il cifrario a flusso basato sui totienti di Eulero $\phi(p_k) = p_k - 1$ in $\mathbb{F}_{29}$ ($C_i \to (C_i - (p_{i+\Delta} - 1)) \pmod{29}$), con supporto per la regola canonica di pausa del keystream sui caratteri Fehu (F-skip):
+```bash
+# Decodifica della Pagina 71 (56.jpg / An End) applicando l'F-skip a indice 56:
+python3 scripts/totient_stream.py dec corpus/page_71_runes.md --f-skip
+
+# Decodifica con offset arbitrario sui numeri primi:
+python3 scripts/totient_stream.py dec "ᚪᚾ᛫ᛖᚾᛞ..." --offset 0
+
+# Cifratura di testo in chiaro con generazione di keystream totiente:
+python3 scripts/totient_stream.py enc "AN END WITHIN THE DEEP WEB" --f-skip
+```
+
+### 3. Crittanalisi a Cascata su Pagina 56 (`cryptanalyze_page56.py`)
+Esegue l'analisi crittanalitica esaustiva della Pagina 56 (273 rune autentiche) contro tre ipotesi matematiche prioritarie:
+- **Ipotesi 1 (Offset Euler Totient Keystream)**: $k_n = (p_{n + \Delta} - 1) \pmod{29}$ con shift sottrattivi, additivi e Beaufort, con e senza pause F-skip.
+- **Ipotesi 2 (Pisano Orbit Recurrence in $\mathbb{F}_{29}$)**: ricorrenze modulari $S_{n+2} = (a S_{n+1} + b S_n) \pmod{29}$ (Fibonacci, Lucas, generatori su periodo di Pisano $\pi(29) = 14$).
+- **Ipotesi 3 (Syntactic Interrupter & Clause-Reset Vigenère)**: clausole delimitate da `᛬` e parole da `᛫` con reset del keystream su parole chiave canoniche.
+
+I candidati vengono filtrati tramite il modello linguistico runico composito, log-likelihood n-gram Al-Kindi, test chi-quadro $\chi^2$, test surrogati Monte Carlo (Sidak $p_{adj}$) e registrati nel ledger SQLite (`vectordb/ledger.sqlite3`):
+```bash
+# Esecuzione della crittanalisi completa su Pagina 56:
+python3 scripts/cryptanalyze_page56.py
+
+# Impostazione del numero di migliori candidati per ipotesi:
+python3 scripts/cryptanalyze_page56.py --top-k 10
+
+# Output in formato JSON con disattivazione del logging su ledger SQLite:
+python3 scripts/cryptanalyze_page56.py --json --no-log
+```
 
 ---
 
@@ -242,22 +293,23 @@ python3 scripts/porta.py --dedup
 
 Quando vuoi arricchire il sistema e fare una sessione di ricerca (pipeline locale e deterministica):
 
-1. **Organizza e Classifica il Corpus (Porta, 0 VRAM)**:
+1. **Partiziona il Master Transcript (se aggiornato dal transcript grezzo)**:
+   ```bash
+   python3 scripts/split_master_transcript.py
+   ```
+2. **Organizza e Classifica il Corpus (Porta, 0 VRAM)**:
    ```bash
    python3 scripts/porta.py
    ```
-   *(Nota: lo scraper `walsingham.py` è archiviato; la pipeline opera sul corpus locale curato).*
-2. **Ingestione Vettoriale con Entropia (Bodleian)**:
+3. **Ingestione Vettoriale con Entropia (Bodleian)**:
    ```bash
    python3 scripts/bodleian.py
    ```
-3. **Avvia la Workstation ed Interroga Trithemius**:
+4. **Avvia la Workstation ed Interroga Trithemius**:
    ```bash
    python3 trithemius.py
    ```
-   (Oppure in modalità diretta CLI: `python3 trithemius.py ask "<domanda>"`)
-
----
+   (Oppure in modalità diretta CLI: `python3 trithemius.py ask "<domanda>"` o `python3 trithemius.py crack 56`)
 
 ---
 
@@ -302,8 +354,8 @@ python3 trithemius.py vigenere dec 01 DIVINITY --f-skip
 
 ## Verifica & Suite di Regressione Crittografica
 
-Per verificare in ogni momento la suite completa di test:
+Per verificare in ogni momento la suite completa di test crittografici e di regressione (367 test unitari e di integrazione attraverso 39 test suite con Python $\ge 3.10$):
 ```bash
-./venv/bin/python -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
-Tutti i 367 test unitari e di integrazione passano al 100% senza regressioni.
+Tutti i 367 test unitari e di integrazione passano al 100% senza alcuna regressione.

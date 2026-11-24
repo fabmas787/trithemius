@@ -18,6 +18,8 @@ The workstation operates across two primary paradigms:
 
 The codebase is organized into modular libraries, each named after a historical scholar or cryptographer whose historical contributions match the component's domain.
 
+Data ingestion, corpus normalization, and cryptanalytic execution operate **100% offline** via Bodleian, Porta, and verified curated transcripts in `corpus/`. External network intelligence harvesters (Walsingham and Bacon) are archived roadmap components; the workstation requires zero external network connectivity for corpus processing, vector embedding, or cryptanalysis.
+
 ```mermaid
 flowchart TD
     subgraph UI ["Interface Layer"]
@@ -34,7 +36,7 @@ flowchart TD
         OpSec["OpSec & Entropy (ciphers/opsec.py, entropy.py)\nPGP 7A35090F & Signal Analysis"]
     end
 
-    subgraph RAGPipeline ["Dual-Track Knowledge Engine"]
+    subgraph RAGPipeline ["Dual-Track Knowledge Engine (100% Offline by Default)"]
         Ask["Query Coordinator (scripts/ask.py)"]
         ChromaStore["Vector Store (ChromaDB + nomic-embed-text)"]
         BM25Store["Zero-VRAM BM25 Lexical Fallback"]
@@ -42,10 +44,19 @@ flowchart TD
         Bacon["Bacon (scripts/bacon.py)\n[ARCHIVED / ROADMAP]"]
     end
 
-    subgraph Ingestion ["Intelligence Gathering & Hygiene"]
-        Walsingham["Walsingham (scripts/walsingham.py)\n[ARCHIVED / ROADMAP]"]
+    subgraph Ingestion ["Offline Ingestion & Normalization"]
         Porta["Porta (scripts/porta.py)\nLibrarian, Classifier & Dedup"]
         Bodleian["Bodleian (scripts/bodleian.py)\nPage-Aware Semantic Chunking"]
+        SplitMaster["SplitMaster (scripts/split_master_transcript.py)\nRunic Master Partitioning"]
+        Normalize["Normalize (scripts/normalize_runes.py)\nFuthorc Standardization"]
+        Walsingham["Walsingham (scripts/walsingham.py)\n[ARCHIVED / ROADMAP]"]
+    end
+
+    subgraph Solvers ["Standalone Solvers & Pipelines"]
+        SolveCanonical["Solve Canonical (scripts/solve_canonical.py)\n9 Solved Pages Suite"]
+        TotientStream["Totient Stream (scripts/totient_stream.py)\nPrime Totient F-Skip Engine"]
+        Page56["Page 56 (scripts/cryptanalyze_page56.py)\nCascade Solver Pipeline"]
+        Bench["Benchmark (scripts/benchmark.py)\ncProfile & Latency Suite"]
     end
 
     subgraph Inference ["Multi-Provider Inference Engine (scripts/providers.py)"]
@@ -63,14 +74,37 @@ flowchart TD
 
     Ask --> ChromaStore
     Ask --> BM25Store
-    Ask --> Bacon
+    Ask -.->|Archived| Bacon
     Corpus --> BM25Store
     Corpus --> Bodleian --> ChromaStore
-    Walsingham --> Corpus
+    Corpus --> SplitMaster
+    Corpus --> Normalize
+    Walsingham -.->|Archived| Corpus
     Porta --> Corpus
 
+    CoreEngine --> Solvers
     Ask --> Inference
 ```
+
+### 2.1 Complete Script & Utility Inventory
+
+The `scripts/` directory houses specialized data transformation utilities, standalone cryptanalytic solvers, inference coordinators, and benchmarking harnesses:
+
+- **Ingestion, Normalization & Corpus Management**:
+  - `scripts/bodleian.py`: Page-aware semantic chunker that splits text along paragraph boundaries with cryptographic metadata enrichment and embeds chunks into ChromaDB via `nomic-embed-text`.
+  - `scripts/porta.py`: Corpus librarian and normalizer executing SHA-256 deduplication, automatic document classification, standardized naming, and cryptographic metadata injection.
+  - `scripts/split_master_transcript.py`: Liber Primus runic master partitioning utility parsing master transcription (`corpus/liber-primus__transcription--master.txt`) into standardized individual page files (`corpus/page_{XX}_runes.md`) with delimiter preservation (interpuncts `᛫`, triple dots `᛭`, clause colons `᛬`, paragraph breaks `&`, section separators `$`, and line breaks `/`).
+  - `scripts/normalize_runes.py`: Futhorc rune standardization and OCR cleaning utility that resolves inconsistent Unicode transliterations and validates characters against the official 29 Gematria Primus runes.
+  - `scripts/walsingham.py` `[ARCHIVED / ROADMAP]`: Autonomous anti-bot web reconnaissance scout. Archived in favor of the 100% offline, reproducible Bodleian + Porta corpus pipeline.
+- **Standalone Cryptanalytic Solvers & Pipelines**:
+  - `scripts/solve_canonical.py`: Verification and automated solving suite faithfully reproducing the exact mathematical decryptions for all 9 historically solved Liber Primus pages against official Uncovering Cicada wiki reference plaintexts.
+  - `scripts/totient_stream.py`: Standalone CLI decoder/encoder for the Liber Primus Prime Totient Stream cipher ($\phi(p_i) = p_i - 1 \bmod 29$) with cleartext Fehu pause (F-skip) handling.
+  - `scripts/cryptanalyze_page56.py`: Automated cascade cryptanalysis pipeline targeting the authentic 273-rune transcript of Page 56 / 73, evaluating offset Euler totient streams, Pisano recurrence orbits in $\mathbb{F}_{29}$, and syntactic interrupters.
+- **RAG, Inference & Benchmarking**:
+  - `scripts/ask.py`: Dual-track retrieval-augmented generation coordinator with deterministic rule routing and hybrid vector/BM25 retrieval.
+  - `scripts/providers.py`: Multi-provider LLM inference engine supporting local Ollama, remote Ollama instances, Groq, Google Gemini, OpenAI, Anthropic Claude, and OpenRouter streaming.
+  - `scripts/benchmark.py`: Performance benchmark suite and profiling harness measuring cryptographic primitive latencies with microsecond precision, GC-safe execution, baseline persistence, and Python `cProfile` hotspot analysis.
+  - `scripts/bacon.py` `[ARCHIVED / ROADMAP]`: Live web search reconnaissance bridge via DuckDuckGo. Archived in favor of deterministic offline local RAG; `/web` aliases to offline corpus search.
 
 ---
 
@@ -102,21 +136,53 @@ Named after Friedrich Kasiski, this module handles polyalphabetic substitution f
 
 ### 3.3 Al-Kindi: Statistical Gatekeeper (`ciphers/al_kindi.py`)
 Named after the 9th-century polymath who invented frequency analysis, Al-Kindi verifies whether a candidate decryption is plausible English or random noise.
-- **Chi-Squared Goodness-of-Fit**: Computes deviation from standard English letter distributions ($\chi^2 < 180$ indicates plausible natural language; random text yields $> 300$).
-- **N-Gram Log-Likelihood**: Evaluates high-frequency trigrams (`THE`, `AND`, `ING`) and quadgrams (`TION`, `THAT`, `WITH`) scoring candidates between $0.0$ and $1.0$.
-- **Dictionary Hit Ratio**: Validates plaintext against a 100-word lexicon of philosophical and common English terms prominent in Cicada texts.
-- **Composite Verdict**: Assigns a classification (`PLAUSIBLE`, `UNCERTAIN`, `IMPLAUSIBLE`).
+- **Length-Invariant Kullback-Leibler Divergence**:
+  Computes relative entropy $D_{\text{KL}}(P_{\text{obs}} \parallel P_{\text{ref}})$ against standard English monogram distributions:
+  $$D_{\text{KL}}(P \parallel Q) = \sum_{x \in \Sigma} P(x) \ln\left(\frac{P(x) + \epsilon}{Q(x) + \epsilon}\right)$$
+  enforcing Gibbs non-negativity with a strict lower bound clamp ($D_{\text{KL}} \ge 0.0$). Standard $\chi^2$ scales linearly with sequence length $N$ (causing false rejection of authentic decryptions when $N > 800$), whereas length-invariant KL divergence ensures scale-independent linguistic scoring (typical English yields $D_{\text{KL}} \in [0.10, 0.40]$, whereas uniform noise exceeds $1.5$).
+- **Reduced Chi-Squared ($\chi^2_\nu$)**:
+  Normalizes the goodness-of-fit statistic by degrees of freedom:
+  $$\chi^2_\nu = \frac{\chi^2}{25}$$
+  where $\nu = 26 - 1 = 25$ for English monograms ($\chi^2_\nu \approx 1.0$ for natural language; random permutations yield $\chi^2_\nu > 10.0$).
+- **Analytical $p$-Value via Wilson-Hilferty Transformation**:
+  Evaluates upper-tail significance using the Wilson-Hilferty transformation implemented strictly in the Python standard library via `math.erfc` (zero external `scipy` dependencies):
+  $$z = \frac{(\chi^2 / \nu)^{1/3} - \left(1 - \frac{2}{9\nu}\right)}{\sqrt{\frac{2}{9\nu}}}, \quad p = \frac{1}{2} \operatorname{erfc}\left(\frac{z}{\sqrt{2}}\right)$$
+- **N-Gram Log-Likelihood**:
+  Evaluates high-frequency trigrams (`THE`, `AND`, `ING`) and quadgrams (`TION`, `THAT`, `WITH`), scoring candidate structure between $0.0$ and $1.0$.
+- **High-Performance $O(1)$ Master Dictionary Search**:
+  Validates plaintext tokens and unspaced character substrings against an immutable $O(1)$ `frozenset` (`CORE_WORDS_FROZEN`) combining core English vocabulary with the comprehensive Cicada master philosophical and cryptanalytic lexicon (`get_master_dictionary_set()`).
+- **Composite Verdict**:
+  Synthesizes KL divergence, per-symbol $\chi^2 / N$, n-gram likelihood, and dictionary hit ratio to assign deterministic verdicts (`PLAUSIBLE`, `UNCERTAIN`, `IMPLAUSIBLE`).
 
 ### 3.4 Taxonomy: Advanced $\mathbb{Z}_{29}$ Cryptanalytic Suite (`ciphers/taxonomy.py`)
 Implements the comprehensive mathematical cryptanalysis taxonomy over the linear channel $\text{GF}(29)$ for recovering keys and deciphering unsolved Liber Primus pages:
-- **Calibrated $\mathbb{Z}_{29}$ Runic Language Model**: 29-symbol unigram and $29 \times 29$ bigram log-likelihood models calibrated on verified Liber Primus solved pages with add-$k$ smoothing.
-- **Statistical Triage Engine**: Computes unigram IC, normalized $\kappa = 29 \cdot \text{IC}$, bigram IC, and conditional entropy $H(X_n \mid X_{n-1})$ to diagnose Monoalphabetic, Periodic Polyalphabetic, Transposition, or Stream/OTP cipher families.
-- **Consensus Period Detection**: Ensembles Kasiski weighted GCD voting on repeated $n$-grams, a Difference Periodogram comb filter measuring $\chi^2$ divergence across all 29 difference bins, and column-IoC scans with BIC penalty.
-- **Separable Per-Column & T-Table Solvers**: Precomputes matrix $T[m][29]$ to recover optimal unigram keys in $O(29 \cdot m)$ time, Mutual Index of Coincidence (MIC) column alignment with 29-way gauge shift scans, and coupled hill climbing.
-- **$O(m)$ Fast Dictionary Matching**: Screens thousands of candidate word keys in microseconds using the T-table trick.
-- **Crib Dragging & Linear Recurrence**: Evaluates implied key fragments via Berlekamp–Massey over $\text{GF}(29)$, detects constant and linear finite differences, and matches fragments against an $O(1)$ precomputed stream hash bank (primes, totients, Fibonacci).
-- **Surrogate-Data Null Hypothesis Testing**: Monte Carlo ciphertext shuffle tests ($N=50$) generating empirical $Z$-scores to prevent false-positive hallucination.
-- **Persistent Ledger Integration**: Automatically records all explored hypotheses, parameters, and decryptions into the SQLite database (`agents/ledger.py`) with canonical SHA-256 deduplication.
+- **Calibrated Hybrid $\mathbb{Z}_{29}$ Bigram Language Model**:
+  Combines empirical transition frequencies from verified Liber Primus solved pages ($P_{\text{lp}}$) with background historical English reference literature ($P_{\text{bg}}$) mapped into Futhorc space:
+  $$P_{\text{hybrid}}(r_2 \mid r_1) = 0.35 P_{\text{lp}}(r_2 \mid r_1) + 0.65 P_{\text{bg}}(r_2 \mid r_1)$$
+  incorporating add-$k$ Laplace/Lidstone smoothing.
+- **Persistent Model Caching**:
+  Background transition matrix $P_{\text{bg}}$ is persistently cached at `vectordb/z29_background_bigrams.json`. The loader checks the maximum modification time (`mtime`) of corpus texts in `corpus/reference_texts/`, achieving $< 2\text{ms}$ cold-start load times without re-parsing reference corpora.
+- **Statistical Triage Engine**:
+  Computes unigram IC, normalized $\kappa = 29 \cdot \text{IC}$, bigram IC, and conditional entropy $H(X_n \mid X_{n-1})$ to diagnose Monoalphabetic, Periodic Polyalphabetic, Transposition, or Stream/OTP cipher families.
+- **Consensus Period Detection**:
+  Ensembles Kasiski weighted GCD voting on repeated $n$-grams, a Difference Periodogram comb filter measuring $\chi^2$ divergence across all 29 difference bins, and column-IoC scans with BIC penalty.
+- **Separable Per-Column & T-Table Solvers**:
+  Precomputes matrix $T[m][29]$ to recover optimal unigram keys in $O(29 \cdot m)$ time, Mutual Index of Coincidence (MIC) column alignment with 29-way gauge shift scans, and coupled hill climbing.
+- **$O(m)$ Fast Dictionary Matching**:
+  Screens thousands of candidate word keys in microseconds using the T-table trick.
+- **Crib Dragging & Linear Recurrence**:
+  Evaluates implied key fragments via Berlekamp–Massey over $\text{GF}(29)$, detects constant and linear finite differences, and matches fragments against an $O(1)$ precomputed stream hash bank (primes, totients, Fibonacci).
+- **Seed-Isolated Surrogate Shuffle Testing**:
+  Monte Carlo surrogate-data null distribution tests (`surrogate_shuffle_test`) instantiate a dedicated, local PRNG instance via `random.Random(seed)` (default seed 3301), ensuring mathematical reproducibility and zero pollution of Python's global `random` state.
+- **Two-Stage Multi-Testing Control**:
+  Enforces strict family-wise error rate control against candidate over-searching:
+  - For batch candidate trials ($n_{\text{trials}} > 1$), applies Bonferroni correction:
+    $$p_{\text{adj}} = \min(1.0, p_{\text{emp}} \times n_{\text{trials}})$$
+  - For single candidate evaluations ($n_{\text{trials}} = 1$), applies Šidák correction against cumulative historical hypothesis attempts $K$ recorded in the ledger:
+    $$p_{\text{adj}} = 1 - (1 - p_{\text{emp}})^K$$
+  Significance requires ($Z \ge 3.5$ or $p_{\text{adj}} < 0.01$) alongside a composite score $\ge -3.40$.
+- **Persistent Ledger Integration**:
+  Automatically records all explored hypotheses, parameters, and decryptions into the SQLite database (`agents/ledger.py`) with canonical SHA-256 deduplication.
 
 ### 3.5 Unicity: Identifiability Budget & Shannon Unicity Distance (`ciphers/unicity.py`)
 Computes the theoretical limits of cryptanalysis over $\mathbb{Z}_{29}$:
@@ -144,6 +210,14 @@ Vectorized computation of the complete coincidence spectrum $\kappa(d) = \sum I(
 Modular, dynamic keystream mutation and scheduling engine modeling the mechanisms in solved Liber Primus pages (Pages 03–04, 14–15):
 - **Canonical 29-Rune Alignment**: Corrects flawed literature by preserving all 29 Futhorc runes and canonical key shifts (`DIVINITY`, `FIRFUMFERENFE`).
 - **Dynamic Interrupter Modes**: Bijective bidirectional encoding and decoding with 5 interrupt configurations, supporting cleartext Fehu preservation, ciphertext matching, key pausing vs. advancing, and positional masks.
+- **Cleartext Fehu Periodicity Diagnostic (`analyze_f_skip_periodicity`)**:
+  Diagnostic testing across cleartext Fehu pause intervals via column-slice $\chi^2$ divergence. Evaluates whether intervals between Fehu occurrences ($\text{index } 0$) or cleartext F-skips exhibit modular periodicity, tracking exact Fehu positions, inter-Fehu interval deltas, mean recurrence intervals, and local segment boundaries.
+- **Consecutive Double Runes Detection (`detect_double_runes`)**:
+  Computes the empirical rate of consecutive duplicate runes $c_i = c_{i+1}$:
+  $$\text{Rate}_{\text{doubles}} = \frac{\sum_{i=1}^{N-1} I(c_i = c_{i+1})}{N - 1}$$
+  and evaluates it against the theoretical uniform expectation over $\mathbb{Z}_{29}$ ($1/29 \approx 0.03448$ or $3.45\%$), yielding an elevation ratio:
+  $$\text{Elevation Ratio} = \frac{\text{Rate}_{\text{doubles}}}{1/29}$$
+  Natural English plaintext digraph doubling (e.g. `LL`, `EE`, `SS`, `OO`) produces an elevated ratio ($> 1.5$), whereas periodic polyalphabetic and pseudorandom keystream ciphers suppress consecutive duplicate runes.
 
 ### 3.10 Running Key: Running-Key & Book Cipher Engine (`ciphers/running_key.py`)
 Cryptanalysis engine for running-key and book ciphers over $\text{GF}(29)$ Futhorc:
@@ -190,7 +264,11 @@ Combinatorial search engine targeting the 512-bit digest on Page 56 / 73:
 
 ### 3.19 Canonical Solvers & Forensic Provenance (`ciphers/solved_pages.py`, `ciphers/provenance.py`)
 - **`solved_pages.py`**: Exact implementations and test vectors for all 9 historically solved Liber Primus pages.
-- **`provenance.py`**: Tracks metadata provenance, source transcripts, and cryptographic artifact chains.
+- **`provenance.py`**: Container-layer image scan provenance gate for Liber Primus manuscript scans. Operates via standard library `struct` and `hashlib` in sub-millisecond execution without full pixel decompression. Validates candidate image scans against known physical and structural invariants from the original 2014 Liber Primus release:
+  - **Geometry**: Validates exact image dimensions of $2400 \times 3600$ pixels via SOF0/SOF1/SOF2 segment headers.
+  - **JFIF Density Markers**: Verifies APP0 segment specifying 400 DPI density ($X_{\text{density}}=400, Y_{\text{density}}=400, \text{density\_unit}=1$).
+  - **ICC Profile Segments**: Validates APP2 segment containing profile description string `'Artifex Software 2011'`.
+  - **Integrity & Re-encoding Detection**: Computes SHA-1 and SHA-256 digests against published pristine scan hashes; detects altered quantization tables, dimension scaling, or stripped ICC markers.
 
 ---
 
@@ -204,7 +282,22 @@ Cicada 3301 established that any communication not signed with their official PG
 
 ### 4.2 Shannon Entropy & Signal Profiling (`ciphers/entropy.py`)
 Calculates information density to distinguish plaintext from encrypted or compressed data.
-- **Shannon Entropy**: Measures entropy $H(X) = -\sum p(x) \log_2 p(x)$ in bits per character ($0$ to $8$). High entropy ($> 7.2$) indicates encryption or compressed payloads; text entropy typically resides between $3.5$ and $5.0$.
+- **Alphabet-Aware Normalization Across 4 Distinct Alphabets**:
+  Automatically detects and normalizes entropy across 4 discrete symbol alphabets with cardinality $|\Sigma|$:
+  1. Futhorc Runes ($\mathbb{Z}_{29}$, $|\Sigma| = 29$, maximum theoretical entropy $\log_2(29) \approx 4.8580$ bits)
+  2. Hexadecimal Strings ($|\Sigma| = 16$, maximum theoretical entropy $\log_2(16) = 4.0$ bits)
+  3. Latin Alphabetic Characters ($|\Sigma| = 26$, maximum theoretical entropy $\log_2(26) \approx 4.7004$ bits)
+  4. Raw Binary Bytes & Arbitrary Payloads ($|\Sigma| = 256$, maximum theoretical entropy $\log_2(256) = 8.0$ bits)
+- **Automatic Rune Separator Filtering**:
+  Prior to entropy computation, runic clause/word delimiters (`᛫` U+16EB, `᛬` U+16EC, `᛭` U+16ED), whitespace, and newlines are stripped from the input stream. This ensures punctuation does not artificially suppress entropy or distort symbol frequency distributions.
+- **Miller-Madow Sample Bias Correction**:
+  Corrects for sample length $N$ and observed unique symbols $m$ using the first-order Miller-Madow bias expansion:
+  $$\hat{H}_{\text{MM}}(X) = H_{\text{obs}}(X) + \frac{m - 1}{2N \ln 2}$$
+  clamped strictly to the theoretical upper bound $\log_2(|\Sigma|)$.
+- **Normalized Entropy Metric**:
+  Calculates scale-invariant normalized entropy:
+  $$\hat{H}_{\text{norm}} = \frac{\hat{H}_{\text{MM}}(X)}{\log_2(|\Sigma|)} \in [0.0, 1.0]$$
+  providing a uniform basis for comparing information density across diverse encodings (e.g. runes vs. hex digests).
 - **4D Signal Feature Vector**: Extracts entropy, index of coincidence, chi-squared deviation, and byte variance to classify data as `CIPHERTEXT_OR_COMPRESSED`, `STRUCTURED_DATA`, or `NATURAL_LANGUAGE`.
 - **Sliding-Window Boundary Detection**: Scans continuous binary streams for entropy transitions that indicate hidden payloads.
 
@@ -272,18 +365,28 @@ The retrieval engine in `scripts/ask.py` employs a resilient fallback hierarchy:
    - Computes term frequency and inverse document frequency with document length normalization ($k_1 = 1.5, b = 0.75$).
    - Applies relevance boosts for Futhorc runes, Gematria terms, PGP signatures, and targeted Liber Primus page numbers.
    - Executes in $<10\text{ms}$ with zero memory or model overhead.
-3. **Live Web Reconnaissance (Bacon)** `[ARCHIVED / ROADMAP COMPONENT]`: When requested via `/web <query>`, live web search snippets from DuckDuckGo are retrieved and merged into the context budget (archived in favor of offline deterministic local RAG).
+3. **Offline Corpus RAG Query (`/web` & Bacon)** `[ARCHIVED / ROADMAP COMPONENT]`: Live DuckDuckGo web search reconnaissance via Bacon (`scripts/bacon.py`) is archived in favor of complete, authentic transcripts preserved offline in `corpus/`. The `/web <query>` command operates as a direct alias for offline corpus RAG retrieval, ensuring 100% offline reproducibility without external network queries.
 4. **Context Budgeting**: Strictly budgets retrieved context to 2500 characters, guaranteeing prompt evaluation times under 3 seconds while preserving source document provenance.
 
 ---
 
 ## 8. Multi-Agent Orchestration (`agents/`)
 
-For complex cryptanalysis that exceeds single-prompt capabilities, Trithemius includes a multi-agent coordination layer built on CrewAI:
-- **`agents/crew.py`**: Deploys a specialized team of autonomous agents equipped with custom tools (Agrippa rune decoding, Gematria prime calculations, Modulo-29 Vigenère decoding, Atbash transformation, sacred math factorization).
-- **`agents/duel.py`**: Orchestrates adversarial cryptanalytic duels where two models propose, challenge, and verify competing decryption hypotheses against corpus constraints.
-- **`agents/ledger.py`**: Maintains a persistent ledger of historical decryption attempts and test keys, preventing redundant compute.
-- **`agents/regress.py`**: Runs regression test suites against verified Liber Primus solutions.
+For complex cryptanalysis that exceeds single-prompt capabilities, Trithemius includes an autonomous multi-agent coordination layer with Bayesian hypothesis tracking and regression verification. The complete multi-agent suite comprises five specialized modules:
+
+- **`agents/crew.py` (Specialist Cryptanalytic Crew)**: Deploys a specialized team of autonomous agents equipped with custom cryptanalytic tools (Agrippa rune decoding, Gematria prime calculations, Modulo-29 Vigenère decoding, Atbash transformation, sacred math factorization, and Porta/Bodleian corpus inspection).
+- **`agents/duel.py` (Adversarial Hypothesis Duels)**: Orchestrates adversarial cryptanalytic duels where competing models propose, challenge, stress-test, and verify alternative decryption hypotheses against mathematical and corpus constraints.
+- **`agents/evidence.py` (Epistemic Evidence Register & Bayesian Accounting)**: Enforces formal statistical rigor in cryptanalytic accounting. A negative trial is informative only in proportion to the empirical statistical power of the detector:
+  - **Three-Tier Outcome Classification**:
+    - Detections with positive signal $\to$ `'candidate'`.
+    - Negative outcome with empirical detector power $\ge 0.90$ $\to$ `'excluded'`.
+    - Negative outcome with detector power $< 0.90$ $\to$ `'inconclusive'` (preventing premature hypothesis dismissal on under-powered tests).
+  - **Bayesian Posterior Probability Updates**: Computes Bayesian posterior odds and probabilities following negative trials with prior $P(H)$ and detector power $1 - \beta$:
+    $$\text{Posterior Odds} = \text{Prior Odds} \times (1 - \text{detector\_power})$$
+    $$P(H \mid \text{negative}) = \frac{\frac{P(H)}{1 - P(H)} \times (1 - \text{detector\_power})}{1 + \frac{P(H)}{1 - P(H)} \times (1 - \text{detector\_power})}$$
+  - **Persistent Evidence Schema**: Manages the `detector_power` table in `vectordb/ledger.sqlite3` (`detector_id`, `family`, `n_symbols`, `power`, `trials`, `measured_at`), tracking detector sensitivity across cipher families and text lengths.
+- **`agents/ledger.py` (Persistent Cryptanalytic Ledger)**: Maintains a persistent SQLite ledger and ChromaDB vector database of all historical decryption attempts, test keys, and statistical metrics, with canonical SHA-256 deduplication to prevent redundant computation across sessions.
+- **`agents/regress.py` (Automated Regression Verification)**: Runs deterministic regression test suites against verified Liber Primus solutions, confirming that solver and pipeline modifications preserve canonical ground truth.
 
 ---
 
@@ -294,26 +397,41 @@ Launching `python3 trithemius.py` or `./start.sh` opens the interactive workstat
 
 | Command | Syntax | Description |
 |---|---|---|
-| `/ask` | `/ask <query>` | Query the RAG engine against the Liber Primus corpus |
-| `/web` | `/web <query>` | Query RAG with live web search reconnaissance |
-| `/page` | `/page <number>` | Inspect transcript and previews of a specific Liber Primus page |
-| `/gematria` | `/gematria <text_or_runes>` | Compute prime sum, totient, prime check, and Atbash |
-| `/vigenere` | `/vigenere <enc\|dec> <text> <key>` | Solve Modulo-29 or Modulo-26 Vigenère cipher |
-| `/crack` | `/crack <target> [--deep]` | Automated Liber Primus GF(29) Cryptanalytic Cascade Solver |
-| `/triage` | `/triage <target>` | Statistical triage & cipher classification (IC, kappa, entropy) |
-| `/period` | `/period <target> [max_p]` | Key length consensus & difference periodogram comb estimation |
-| `/crib` | `/crib <target> <crib_word>` | Slide known crib for Berlekamp-Massey LC & stream matching |
-| `/opsec` | `/opsec <text_or_path>` | Verify Cicada 3301 PGP key and compute Shannon entropy |
+| `/ask` | `/ask [--fresh] <query>` | Query RAG cryptanalytic engine with hybrid retrieval & deterministic routing |
+| `/web` | `/web <query>` | Query Liber Primus RAG knowledge engine (offline corpus fallback; live web search via Bacon is archived) |
+| `/page` | `/page <page_num>` | Inspect transcript and previews of a specific Liber Primus page from corpus |
 | `/organize` | `/organize` | Deduplicate and classify corpus documents via Porta |
-| `/ingest` | `/ingest` | Index corpus into ChromaDB via Bodleian |
-| `/status` | `/status` | Display provider, active model, profile, key status, and database metrics |
-| `/provider` | `/provider <name>` | Switch active provider (`ollama`, `groq`, `openai`, `gemini`, etc.) |
-| `/model` | `/model <key_or_name>` | Switch active model key or specify custom model string |
-| `/key` | `/key <provider> <key>` | Store and persist a personal cloud API key in `.env` |
-| `/key show` | `/key show` | Display masked configuration status of all API keys |
-| `/host` | `/host <url>` | Set remote Ollama cloud streaming URL |
-| `/profile` | `/profile <standard\|low-spec>` | Toggle hardware memory profile and context window limits |
-| `/think` | `/think [on\|off]` | Toggle Chain-of-Thought (CoT) reasoning stream |
+| `/ingest` | `/ingest` | Chunk and index corpus documents into ChromaDB vector database via Bodleian |
+| `/gematria` | `/gematria <runes_or_latin>` | Gematria Primus prime sum, totient, prime check & Atbash reflection |
+| `/atbash` | `/atbash <text_filepath_or_page> [--shift N]` | Modulo-29 Atbash and Caesar-shifted Atbash reflection cipher |
+| `/vigenere` | `/vigenere <enc\|dec> <text_filepath_or_page> <key> [--f-skip] [--skip-indices ...]` | Modulo-29 (Futhorc) or Modulo-26 (Latin) Vigenère cipher solver with cleartext Fehu pause |
+| `/totient-stream` | `/totient-stream <enc\|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]` | Liber Primus Prime Totient Stream Cipher ($\phi(p_i) = p_i - 1 \bmod 29$) with Fehu skip |
+| `/totient` | `/totient <enc\|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]` | Liber Primus Prime Totient Stream Cipher alias and single-value totient evaluation |
+| `/solve` | `/solve [page_id\|all]` | Solve and verify canonical Liber Primus solved pages from official wiki |
+| `/crack` | `/crack <target> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]` | Automated Liber Primus $\text{GF}(29)$ Cryptanalytic Cascade Solver with Apple Silicon acceleration |
+| `/hardware` | `/hardware (aliases: /gpu, /metal, /ane)` | Query and benchmark Apple Silicon Metal GPU and Apple Neural Engine acceleration |
+| `/ledger` | `/ledger [page_id_or_word]` | Inspect recorded cryptanalytic attempts in the ChromaDB vector database & SQLite ledger |
+| `/triage` | `/triage <text_filepath_or_page>` | Statistical triage & cipher family classification (IC, kappa, entropy) |
+| `/period` | `/period <text_filepath_or_page> [max_period]` | Key length consensus & difference periodogram comb filter estimation |
+| `/crib` | `/crib <text_filepath_or_page> <crib_word>` | Slide crib word to extract & analyze implied key fragments (Berlekamp-Massey, stream hash bank) |
+| `/layout` | `/layout [target\|calibrate]` | Layout side-channel mutual information analysis & calibration |
+| `/opsec` | `/opsec <text_or_filepath>` | Verify Cicada 3301 PGP 7A35090F signature & Shannon entropy |
+| `/running-key` | `/running-key <page> <text_file> [--mode sub\|add\|beaufort] [--f-skip] [--offset N]` | $\text{GF}(29)$ running-key decryption against reference text |
+| `/running-key-scan` | `/running-key-scan <page> [--ref-dir DIR] [--step N] [--top-k N]` | Sliding window running-key scan across canonical reference texts |
+| `/lexicon` | `/lexicon [phrases\|words\|all] [--limit N]` | Inspect master vocabulary, philosophical phrases, and reference words |
+| `/key` | `/key [show]  OR  /key <provider> <api_key>  OR  /key clear <provider>` | AI API key & cloud provider configuration management |
+| `/think` | `/think [on\|off]` | Toggle Chain-of-Thought (CoT) reasoning for reasoning models |
+| `/boost` | `/boost [on\|off\|status\|toggle]` | Toggle Deep Cryptanalytic Retrieval & Reranking Boost mode |
+| `/provider` | `/provider [name]` | Switch active LLM provider (`ollama`, `groq`, `openai`, `gemini`, `anthropic`, `openrouter`) |
+| `/model` | `/model [key_or_name]` | Switch active language model key or specify custom model |
+| `/host` | `/host [url]` | Set remote Ollama streaming endpoint host URL |
+| `/profile` | `/profile [standard\|low-spec]` | Toggle hardware profile between standard and low-spec memory footprint |
+| `/cache` | `/cache clear` | Clear exact RAG response cache in `vectordb/.rag_cache.json` |
+| `/status` | `/status [--probe]` | Display system telemetry, provider health, model & corpus metrics |
+| `/bench` | `/bench [--profile] [--skip-vector] [--llm] [--compare BASELINE] [--save-baseline NAME]` | Run microsecond latency benchmark suite & hotspot profiling |
+| `/clear` | `/clear` | Clear terminal screen buffer |
+| `/help` | `/help [command]` | Display command manual or detailed help for a specific command |
+| `/exit` | `/exit  OR  /quit` | Safely exit and disconnect from Trithemius Workstation |
 
 ### 9.2 Direct CLI Subcommands
 Individual commands can be executed directly from shell scripts without entering the REPL:
@@ -382,7 +500,9 @@ The test suite contains 367 automated unit and regression tests executing across
   - `tests/test_golden_master.py` (2 tests): Validates byte-level output consistency across CLI and REPL sessions against golden master references.
   - `tests/test_architecture.py` (4 tests), `tests/test_domain_services.py` (3 tests), `tests/test_import_determinism.py` (3 tests): Validates clean architectural boundaries, zero circular dependencies, and deterministic imports.
 
-Running the full suite:
+Running the full suite across all 39 modules:
 ```bash
 ./venv/bin/python -m unittest discover -s tests
+# Alternatively, via system Python:
+python3 -m unittest discover -s tests
 ```
