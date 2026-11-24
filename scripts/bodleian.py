@@ -18,8 +18,15 @@ import json
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Tuple, Optional
-import ollama
-import chromadb
+try:
+    import ollama
+except ImportError:
+    ollama = None
+
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:

@@ -15,7 +15,7 @@
   - `CommandSpec` declarative registry (`workstation/commands.py`): 35 registered commands with CLI router and REPL shell.
   - Interactive REPL (`workstation/ui/repl.py`): Tab-completion, history, and tokenized arguments.
 - **Historical Web GUI**: The experimental browser interface (`gui/`) has been formally archived; this repository checkout represents the dedicated high-performance Terminal Workstation.
-- **Regression Test Baseline**: 367 passing unit and integration tests across 39 test suites, including byte-for-byte golden master validation.
+- **Regression Test Baseline**: 458 passing unit and integration tests across 46 test suites, including byte-for-byte golden master validation.
 
 ## Milestone Status
 | Milestone | Scope | Status | Notes |
@@ -34,4 +34,4 @@
 - `agents/`: Multi-agent orchestration (crew.py, duel.py), Bayesian epistemic evidence ledger (evidence.py, ledger.py), and regression runner (regress.py).
 - `corpus/`: Page transcripts, indexes, and reference literature (`corpus/reference_texts/`).
 - `vectordb/`: Persistent ChromaDB embeddings and canonical hypothesis ledgers.
-- `tests/`: 367 unit tests across 39 test suites, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).
+- `tests/`: 458 unit tests across 46 test suites, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).

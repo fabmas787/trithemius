@@ -5,7 +5,10 @@ and neural semantic scoring.
 """
 
 import unittest
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 from ciphers.metal_accel import (
     is_metal_available,
@@ -39,6 +42,8 @@ class TestMetalAcceleration(unittest.TestCase):
 
     def test_metal_score_keys_batch(self):
         """Verify Metal batch key scoring and equivalence with mathematical definition."""
+        if not is_metal_available():
+            self.skipTest("Metal GPU not available on this platform/configuration")
         period = 7
         t_table = [[float((i * 3 + j * 5) % 29) for j in range(29)] for i in range(period)]
         keys = [
@@ -62,6 +67,8 @@ class TestMetalAcceleration(unittest.TestCase):
 
     def test_metal_sweep_2words(self):
         """Verify parallel 2-word compound sweep and threshold hit retrieval."""
+        if not is_metal_available():
+            self.skipTest("Metal GPU not available on this platform/configuration")
         period = 5
         t_table = [[float((i + j) % 29) for j in range(29)] for i in range(period)]
         words = [
@@ -86,6 +93,8 @@ class TestMetalAcceleration(unittest.TestCase):
 
     def test_metal_sweep_3words(self):
         """Verify parallel 3-word compound sweep."""
+        if not is_metal_available():
+            self.skipTest("Metal GPU not available on this platform/configuration")
         period = 4
         t_table = [[float((i * 2 + j) % 29) for j in range(29)] for i in range(period)]
         words = [
@@ -105,6 +114,8 @@ class TestMetalAcceleration(unittest.TestCase):
 
     def test_metal_surrogate_shuffles(self):
         """Verify parallel Monte Carlo surrogate shuffles."""
+        if not is_metal_available():
+            self.skipTest("Metal GPU not available on this platform/configuration")
         ciphertext = [1, 5, 10, 15, 20, 25, 2, 8, 14, 21, 27]
         unigram_logp = [-2.5 for _ in range(29)]
         period = 4
@@ -135,6 +146,8 @@ class TestNeuralEngineAcceleration(unittest.TestCase):
 
     def test_ane_scoring_discrimination(self):
         """Verify that neural semantic scoring prefers coherent English plaintexts over noise."""
+        if not is_ane_available():
+            self.skipTest("Apple Neural Engine / CoreML not available on this platform")
         natural_texts = [
             "WELCOME PILGRIMS ON THE SACRED PATH OF PRIMES AND DIVINE WISDOM",
             "A WARNING BELIEVE NOTHING FROM THIS BOOK EXCEPT WHAT YOU KNOW TO BE TRUE",
@@ -153,6 +166,8 @@ class TestNeuralEngineAcceleration(unittest.TestCase):
 
     def test_ane_embeddings_normalized(self):
         """Verify computed ANE embeddings have unit L2 norm."""
+        if not is_ane_available():
+            self.skipTest("Apple Neural Engine / CoreML not available on this platform")
         texts = ["TEST VECTOR FOR APPLE SILICON ANE", "ANOTHER CANONICAL SENTENCE"]
         embs = compute_ane_embeddings(texts)
         if is_ane_available() and len(embs) > 0:

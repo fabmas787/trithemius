@@ -300,6 +300,10 @@ class TestPortaNormalization(unittest.TestCase):
 
 class TestProviderConnections(unittest.TestCase):
     def test_thread_local_session_reuse(self):
+        try:
+            import requests
+        except ImportError:
+            self.skipTest("requests library not installed")
         s1 = providers.get_session()
         s2 = providers.get_session()
         self.assertIs(s1, s2)

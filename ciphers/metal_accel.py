@@ -11,7 +11,10 @@ import ctypes
 import subprocess
 import logging
 from typing import List, Tuple, Dict, Any, Optional, Sequence
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 logger = logging.getLogger("metal_accel")
 
@@ -53,6 +56,10 @@ def _load_metal_lib() -> Optional[ctypes.CDLL]:
     global _LIB, _METAL_AVAILABLE
     if _LIB is not None:
         return _LIB
+
+    if np is None:
+        _METAL_AVAILABLE = False
+        return None
 
     if not os.path.exists(DYLIB_PATH):
         if not compile_metal_dylib():

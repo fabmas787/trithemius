@@ -385,6 +385,7 @@ class CipherService:
         compound: bool = False,
         use_metal: bool = True,
         use_ane: bool = True,
+        include_ecc: bool = False,
     ) -> CrackResult:
         """Run full cryptanalytic taxonomy cascade solver on target."""
         tax = _get_taxonomy()
@@ -402,6 +403,7 @@ class CipherService:
             compound=compound,
             use_metal=use_metal,
             use_ane=use_ane,
+            include_ecc=include_ecc,
         )
         res["target_input"] = target
         if file_meta:

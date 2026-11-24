@@ -254,6 +254,62 @@ class TestCryptanalysisTaxonomy(unittest.TestCase):
         crack_data = self.workstation.run_crack(self.sample_ct_runes)
         self.assertIsNotNone(crack_data["winner"])
 
+    def test_difference_ioc_and_triage(self):
+        """Verify difference IoC computation and integration in triage."""
+        triage_res = taxonomy.triage_cipher(self.sample_pt_runes)
+        self.assertIn("difference_ioc", triage_res)
+        self.assertIsInstance(triage_res["difference_ioc"], float)
+        self.assertGreaterEqual(triage_res["difference_ioc"], 0.0)
+
+        # Insufficient data case
+        triage_empty = taxonomy.triage_cipher("ᚠ")
+        self.assertEqual(triage_empty["difference_ioc"], 0.0)
+
+    def test_fuzzy_oeis_matching(self):
+        """Verify fuzzy OEIS matching with Hamming distance <= 2 tolerance."""
+        # Exact primes slice: 2, 3, 5, 7, 11, 13 mod 29
+        prime_slice = [2, 3, 5, 7, 11, 13]
+        matches = taxonomy.fuzzy_oeis_match(prime_slice, max_hamming=2)
+        self.assertTrue(len(matches) > 0)
+        self.assertEqual(matches[0]["oeis_id"], "A000040_PRIMES")
+        self.assertEqual(matches[0]["hamming_distance"], 0)
+
+        # Perturbed slice with 1 error (substitute 7 -> 9)
+        perturbed_1 = [2, 3, 5, 9, 11, 13]
+        matches_1 = taxonomy.fuzzy_oeis_match(perturbed_1, max_hamming=2)
+        self.assertTrue(len(matches_1) > 0)
+        self.assertEqual(matches_1[0]["oeis_id"], "A000040_PRIMES")
+        self.assertEqual(matches_1[0]["hamming_distance"], 1)
+
+        # Perturbed slice with 2 errors (substitute 5 -> 4, 11 -> 12)
+        perturbed_2 = [2, 3, 4, 7, 12, 13]
+        matches_2 = taxonomy.fuzzy_oeis_match(perturbed_2, max_hamming=2)
+        self.assertTrue(len(matches_2) > 0)
+        self.assertEqual(matches_2[0]["oeis_id"], "A000040_PRIMES")
+        self.assertEqual(matches_2[0]["hamming_distance"], 2)
+
+    def test_sbox_and_ecc_sweeps(self):
+        """Verify S-Box and ECC keystream sweeps."""
+        indices = taxonomy.clean_runes_to_indices(self.sample_ct_runes)
+
+        # 1. S-Box sweep
+        sbox_hits = taxonomy.sweep_sbox_substitutions(indices)
+        self.assertIsInstance(sbox_hits, list)
+
+        # 2. ECC sweep
+        ecc_hits = taxonomy.sweep_ecc_keystreams(indices)
+        self.assertIsInstance(ecc_hits, list)
+
+        # 3. crack_liber_primus with include_ecc=True
+        crack_res = taxonomy.crack_liber_primus(
+            self.sample_ct_runes[:30],
+            top_k=3,
+            include_ecc=True,
+            include_sbox=True,
+        )
+        self.assertIn("top_candidates", crack_res)
+        self.assertGreater(len(crack_res["top_candidates"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

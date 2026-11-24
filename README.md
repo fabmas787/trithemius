@@ -54,12 +54,34 @@ Each module is named after a historical cryptographer, philosopher, or scholar w
 12. **ciphers/agrippa.py** — Mappatura ufficiale Gematria Primus a 29 rune, valori primi sacri (2..109), somme di parole, Atbash runico, totienti di Eulero.
 13. **ciphers/kasiski.py** — Risolutore Vigenère modulo-29 in $\mathbb{F}_{29}$, keystream canonici Cicada (primi, Fibonacci, totienti), Indice di Coincidenza (IoC) e test di Friedman.
 14. **ciphers/al_kindi.py** — Chi-quadro goodness-of-fit, verosimiglianza logaritmica quadgrammi/trigrammi inglesi, validazione del vocabolario dizionario.
-15. **ciphers/taxonomy.py** (+ 14 moduli ciphers) — Suite tassonomica avanzata GF(29), modelli linguistici calibrati, periodogrammi, T-table solver, crib dragging, test surrogati Monte Carlo, e moduli `unicity`, `sprt`, `difference`, `lagcoinc`, `interrupter`, `running_key`, `affine`, `fingerprint`, `container`, `layout`, `lexicon`, `zimmermann`, `keymap`, `hash_hunt`.
-16. **ciphers/solved_pages.py** — Implementazioni canoniche verificate delle 9 pagine risolte secondo la documentazione storica del wiki Uncovering Cicada.
-17. **ciphers/provenance.py** — Validatore forense per scansioni originali del manoscritto (geometria 2400x3600, JFIF 400 DPI, profilo ICC Artifex, tabelle di quantizzazione).
-18. **ciphers/metal_accel.py & ane_engine.py** — Accelerazione hardware opzionale Apple Silicon Metal GPU e Apple Neural Engine (ANE CoreML) con fallback trasparente su CPU.
-19. **ciphers/entropy.py & opsec.py** — Entropia di Shannon $H(X)$, tagli di confine a finestra mobile, feature vector $\vec{F}$, verifica crittografica chiave PGP Cicada `7A35090F`.
-20. **agents/** — Suite di orchestrazione multi-agente (`crew.py`, `duel.py`), Bayesian epistemic evidence ledger (`evidence.py`, `ledger.py`) e regression runner (`regress.py`).
+15. **ciphers/taxonomy.py** — Suite tassonomica avanzata GF(29), modelli linguistici calibrati, periodogrammi, T-table solver, crib dragging, sweep S-Box nonlinear, sweep keystream ECC `--include-ecc`, e test surrogati Monte Carlo.
+16. **14 Moduli Crittanalitici Specializzati (`ciphers/`)**:
+    - `affine.py`: Forma canonica irriducibile $(ax + b) \bmod 29$ e riduzioni sui gruppi $C_{29}$, $D_{29}$, $\text{Aff}(\mathbb{Z}_{29})$.
+    - `container.py`: Parser di grammatica container fino a EOF logico (JPEG, PNG, GIF, ZIP, PDF) ed estrazione overlay steganografici.
+    - `difference.py`: Constraint solving nel dominio delle differenze $\Delta_i$, vincolo zero-hole, sequenze sacre ($\mu, \lambda, \lambda_{\text{carm}}, \sigma, d, \omega, \Omega$), difference IoC e pattern IoC.
+    - `fingerprint.py`: Likelihood-free inference (Analysis-by-Synthesis) e confronto feature vector contro il profilo empirico del Liber Primus.
+    - `hash_hunt.py`: Reticolo combinatorio per la ricerca dell'hash a 512 bit di Pagina 56 (SHA-512, SHA3-512, BLAKE2b).
+    - `interrupter.py`: Motore interrupter dinamico a 5 configurazioni, pause Fehu (F-skip), diagnostica duplicati e callback per clausole SAT blocking.
+    - `keymap.py`: Mappatura canonica di byte arbitrari in keystream in $\mathbb{Z}_{29}$ (`mod29`, `reject232`, `base29`).
+    - `lagcoinc.py`: Spettro esatto di coincidenza via FFT su 29 canali indicatori con modalità NumPy e puro Python.
+    - `layout.py`: Mutua informazione del layout $I(\text{layout}; \text{keystream shift})$, correzione Miller-Madow e test permutazionali Besag-Clifford.
+    - `lexicon.py`: Vocabolario filosofico Cicada 3301 con trasformazioni multi-vettore e lookup $O(1)$ su prefissi.
+    - `running_key.py`: Cifrario running-key e book cipher in $\mathbb{F}_{29}$ con propagazione F-skip e scansione sliding-window su testi letterari.
+    - `sprt.py`: Sequential Probability Ratio Test (SPRT) di Wald sui bigrammi in $\mathbb{Z}_{29}$ con soglie di arresto rapido.
+    - `unicity.py`: Distanza di unicità di Shannon $U = H(K)/D$, ridondanza del linguaggio e periodo massimo risolvibile.
+    - `zimmermann.py`: Verifica OpenPGP RFC 4880 pura-Python con controlli RSA PKCS#1 v1.5 a tempo costante.
+17. **ciphers/solved_pages.py** — Implementazioni canoniche verificate delle 9 pagine risolte secondo la documentazione storica del wiki Uncovering Cicada.
+18. **ciphers/provenance.py** — Validatore forense per scansioni originali del manoscritto (geometria 2400x3600, JFIF 400 DPI, profilo ICC Artifex, tabelle di quantizzazione).
+19. **Accelerazione Hardware con Fallback su CPU (`ciphers/metal_accel.py` & `ane_engine.py`)** — Compute engine GPU Metal Apple Silicon per scoring parallelo di chiavi e shuffles surrogati, e interfaccia Apple Neural Engine (ANE CoreML) per scoring semantico offline. In ambienti Linux, Windows o privi di GPU/NumPy, l'intero sistema esegue un fallback automatico e bit-exact su implementazioni in standard library pura.
+20. **ciphers/entropy.py & opsec.py** — Entropia di Shannon normalizzata su 4 alfabeti, feature vector $\vec{F}$, autenticazione firma PGP Cicada `7A35090F`, diagnostica spettrale binaria FWHT/DDT e pipeline di audit RSA (Miller-Rabin, Fermat, Pollard's rho, Wiener).
+21. **Nuovi Moduli Fase 2 (`ciphers/`)**:
+    - `spectral_sbox.py`: Analisi spettrale, differenziale e non lineare di S-Box in $\mathbb{F}_{29}$ (DDT, uniformità differenziale, FWHT, LAT, non linearità, SAC, grado algebrico, linear hull potential).
+    - `algebraic.py`: Crittanalisi algebrica mediante matrici di Macaulay ed eliminazione di Gauss a scala (RREF) in $\mathbb{F}_{29}$, rilevamento NLFSR ed esportatore SageMath.
+    - `lattice.py`: Riduzione di reticoli con LLL ($\delta=0.99$), radici piccole di Coppersmith (Howgrave-Graham), subset sum Lagarias-Odlyzko/CJLOSS per pesi primi e relazioni intere (PSLQ).
+    - `rsa_audit.py`: Pipeline di audit e fattorizzazione RSA (basi certificate Miller-Rabin, Fermat close primes, Pollard rho con ciclo di Brent, attacco di Wiener e Boneh-Durfee).
+    - `sat_oracle.py`: Risolutore DPLL/CDCL con watched literals, callback per oracoli programmatici e iniezione dinamica di blocking clauses con backjumping.
+    - `ecc_stream.py`: Aritmetica per curve ellittiche in forma di Weierstrass corta $y^2 = x^3 + ax + b \pmod p$, verifica bound di Hasse ed estrazione keystream $x(kP) \bmod 29, y(kP) \bmod 29$ su $\mathbb{F}_{29}$ e primi sacri Cicada (3301, 1033, 761).
+22. **agents/** — Suite di orchestrazione multi-agente (`crew.py`, `duel.py`), Bayesian epistemic evidence ledger (`evidence.py`, `ledger.py` con manifest di riproducibilità a 10 punti e checklist a 8 punti) e regression runner (`regress.py`).
 
 ---
 
@@ -354,8 +376,8 @@ python3 trithemius.py vigenere dec 01 DIVINITY --f-skip
 
 ## Verifica & Suite di Regressione Crittografica
 
-Per verificare in ogni momento la suite completa di test crittografici e di regressione (367 test unitari e di integrazione attraverso 39 test suite con Python $\ge 3.10$):
+Per verificare in ogni momento la suite completa di test crittografici e di regressione (458 test unitari e di integrazione attraverso 46 test suite con Python $\ge 3.10$):
 ```bash
 python3 -m unittest discover -s tests
 ```
-Tutti i 367 test unitari e di integrazione passano al 100% senza alcuna regressione.
+Tutti i 458 test unitari e di integrazione passano al 100% senza alcuna regressione.
