@@ -55,6 +55,7 @@ vectordb/cache.sqlite3*
 .manus/
 .agents/
 .placeholder
+.superpowers/
 
 # Editor and IDE configurations
 .vscode/
