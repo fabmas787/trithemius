@@ -21,7 +21,7 @@ Corrections to previous flawed literature & code:
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Union, Tuple, Dict, Optional, Set
+from typing import List, Union, Tuple, Dict, Optional, Set, Any
 import os
 import sys
 
@@ -426,3 +426,68 @@ def rune_vigenere_encode_f_skip(
         preserve_separators=preserve_separators
     )
     return ct, set(cfg.interrupt_positions)
+
+
+def analyze_f_skip_periodicity(ciphertext: str) -> Dict[str, Any]:
+    """
+    Diagnostic analysis of F-skip and consecutive double runes in ciphertext.
+    Evaluates:
+    - consecutive double runes rate: count(C_i == C_{i+1}) / (N - 1) vs uniform 1/29 (~3.45%)
+    - fehu positions and local intervals/periods between consecutive Fehu (ᚠ, index 0)
+    - local segmentation between Fehu runes
+    """
+    has_runes = any(c in INDEX_BY_RUNE for c in ciphertext)
+    has_latin = any(c.isalpha() for c in ciphertext)
+    input_runes = ciphertext if (has_runes or not has_latin) else latin_to_rune(ciphertext)
+    clean_runes = [c for c in input_runes if c in INDEX_BY_RUNE]
+    indices = [INDEX_BY_RUNE[c] for c in clean_runes]
+    n = len(indices)
+
+    uniform_rate = round(1.0 / 29.0, 5)  # 1/29 ≈ 0.03448 (3.45%)
+    if n < 2:
+        return {
+            "rune_count": n,
+            "consecutive_doubles_count": 0,
+            "consecutive_doubles_rate": 0.0,
+            "uniform_doubles_rate": uniform_rate,
+            "doubles_elevation_ratio": 0.0,
+            "fehu_count": len([i for i in indices if i == 0]),
+            "fehu_positions": [i for i, idx in enumerate(indices) if idx == 0],
+            "fehu_intervals": [],
+            "mean_fehu_interval": 0.0,
+            "segments_between_fehu": [n] if n > 0 else [],
+        }
+
+    consecutive_doubles = sum(1 for i in range(n - 1) if indices[i] == indices[i + 1])
+    doubles_rate = round(consecutive_doubles / (n - 1), 5)
+    elevation_ratio = round(doubles_rate / uniform_rate, 3) if uniform_rate > 0 else 1.0
+
+    fehu_positions = [i for i, idx in enumerate(indices) if idx == 0]
+    fehu_intervals = [fehu_positions[i + 1] - fehu_positions[i] for i in range(len(fehu_positions) - 1)]
+    mean_interval = round(sum(fehu_intervals) / len(fehu_intervals), 2) if fehu_intervals else 0.0
+
+    segments: List[int] = []
+    if fehu_positions:
+        if fehu_positions[0] > 0:
+            segments.append(fehu_positions[0])
+        for interval in fehu_intervals:
+            segments.append(interval - 1)
+        after_last = n - 1 - fehu_positions[-1]
+        if after_last > 0:
+            segments.append(after_last)
+    else:
+        segments.append(n)
+
+    return {
+        "rune_count": n,
+        "consecutive_doubles_count": consecutive_doubles,
+        "consecutive_doubles_rate": doubles_rate,
+        "uniform_doubles_rate": uniform_rate,
+        "doubles_elevation_ratio": elevation_ratio,
+        "fehu_count": len(fehu_positions),
+        "fehu_positions": fehu_positions,
+        "fehu_intervals": fehu_intervals,
+        "mean_fehu_interval": mean_interval,
+        "segments_between_fehu": segments,
+    }
+

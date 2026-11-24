@@ -15,6 +15,7 @@ structure over the GF(29) linear channel:
 """
 
 from collections import Counter
+import json
 import math
 import os
 import random
@@ -49,6 +50,7 @@ try:
         rune_vigenere_decode_dynamic,
         rune_vigenere_decode_f_skip,
         rune_vigenere_encode_dynamic,
+        analyze_f_skip_periodicity,
     )
     from ciphers.kasiski import prime_totient_stream_decode
 except ImportError:
@@ -73,6 +75,7 @@ except ImportError:
         rune_vigenere_decode_dynamic,
         rune_vigenere_decode_f_skip,
         rune_vigenere_encode_dynamic,
+        analyze_f_skip_periodicity,
     )
     from kasiski import prime_totient_stream_decode
 
@@ -205,11 +208,13 @@ CANONICAL_CRIBS = [
 
 def _build_calibrated_model() -> Tuple[List[float], List[List[float]], Set[str], Set[str]]:
     """
-    Constructs calibrated GF(29) Futhorc unigram and bigram log-probability distributions
-    derived from verified Liber Primus plaintexts with add-k (Laplace) smoothing.
+    Constructs calibrated GF(29) Futhorc unigram and hybrid bigram log-probability distributions.
+    Interpolates verified Liber Primus solved plaintexts with background reference literature:
+    P_hybrid(r2|r1) = 0.35 * P_lp(r2|r1) + 0.65 * P_bg(r2|r1).
+    Caches P_bg to vectordb/z29_background_bigrams.json with mtime verification (<2ms load).
     """
     unigram_counts = [1.0] * M  # add-1 smoothing
-    bigram_counts = [[0.1] * M for _ in range(M)]  # add-0.1 smoothing
+    lp_bigram_counts = [[0.1] * M for _ in range(M)]  # add-0.1 smoothing
 
     for pt in SOLVED_LP_PLAINTEXTS:
         runes = latin_to_rune(pt)
@@ -217,7 +222,7 @@ def _build_calibrated_model() -> Tuple[List[float], List[List[float]], Set[str],
         for idx in indices:
             unigram_counts[idx] += 2.0  # Weight solved LP text higher
         for i in range(len(indices) - 1):
-            bigram_counts[indices[i]][indices[i + 1]] += 2.0
+            lp_bigram_counts[indices[i]][indices[i + 1]] += 2.0
 
     # Also augment with standard English frequency distribution mapped to Futhorc
     english_letter_freq = {
@@ -235,10 +240,69 @@ def _build_calibrated_model() -> Tuple[List[float], List[List[float]], Set[str],
     total_unigrams = sum(unigram_counts)
     unigram_logp = [math.log(c / total_unigrams) for c in unigram_counts]
 
-    bigram_logp = []
-    for row in bigram_counts:
+    # 1. P_lp(r2 | r1) conditional probability matrix
+    p_lp = []
+    for row in lp_bigram_counts:
         row_tot = sum(row)
-        bigram_logp.append([math.log(c / row_tot) for c in row])
+        p_lp.append([c / row_tot for c in row])
+
+    # 2. P_bg(r2 | r1) from cached JSON or corpus/reference_texts/
+    ref_dir = os.path.join(BASE_DIR, "corpus", "reference_texts")
+    cache_path = os.path.join(BASE_DIR, "vectordb", "z29_background_bigrams.json")
+
+    p_bg = None
+    max_ref_mtime = 0.0
+    txt_files = []
+    if os.path.isdir(ref_dir):
+        txt_files = [os.path.join(ref_dir, f) for f in os.listdir(ref_dir) if f.endswith(".txt")]
+        if txt_files:
+            max_ref_mtime = max(os.path.getmtime(p) for p in txt_files)
+
+    if os.path.isfile(cache_path) and os.path.getmtime(cache_path) >= max_ref_mtime:
+        try:
+            with open(cache_path, "r", encoding="utf-8") as fp:
+                cached = json.load(fp)
+            if isinstance(cached, dict) and "matrix" in cached:
+                p_bg = cached["matrix"]
+            elif isinstance(cached, list) and len(cached) == M:
+                p_bg = cached
+        except Exception:
+            p_bg = None
+
+    if p_bg is None:
+        bg_counts = [[0.05] * M for _ in range(M)]  # add-0.05 smoothing
+        if txt_files:
+            for p in sorted(txt_files):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as fp:
+                        text = fp.read()
+                    runes = latin_to_rune(text)
+                    indices = [INDEX_BY_RUNE[c] for c in runes if c in INDEX_BY_RUNE]
+                    for i in range(len(indices) - 1):
+                        bg_counts[indices[i]][indices[i + 1]] += 1.0
+                except Exception:
+                    pass
+        p_bg = []
+        for row in bg_counts:
+            row_tot = sum(row)
+            p_bg.append([c / row_tot for c in row])
+
+        # Write cache to disk
+        try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w", encoding="utf-8") as fp:
+                json.dump({"mtime": max_ref_mtime, "matrix": p_bg}, fp)
+        except Exception:
+            pass
+
+    # 3. Hybrid interpolation: P_hybrid = 0.35 * P_lp + 0.65 * P_bg
+    bigram_logp = []
+    for r in range(M):
+        row = []
+        for c in range(M):
+            p_h = 0.35 * p_lp[r][c] + 0.65 * p_bg[r][c]
+            row.append(math.log(max(1e-12, p_h)))
+        bigram_logp.append(row)
 
     # Canonical rune words
     rune_lexicon = set()
@@ -404,10 +468,12 @@ def compute_word_length_distribution(raw_text: str) -> Dict[int, int]:
 def triage_cipher(ciphertext: str) -> dict:
     """
     Executes full statistical triage to diagnose cipher family.
-    Returns IC, normalized kappa, bigram IC, conditional entropy, and classification.
+    Returns IC, normalized kappa, bigram IC, conditional entropy, F-skip & doubles diagnostics, and classification.
     """
     indices = clean_runes_to_indices(ciphertext)
     n = len(indices)
+    uniform_doubles = round(1.0 / 29.0, 5)
+
     if n < 2:
         return {
             "rune_count": n,
@@ -415,6 +481,14 @@ def triage_cipher(ciphertext: str) -> dict:
             "normalized_kappa": 0.0,
             "bigram_ic": 0.0,
             "conditional_entropy": 0.0,
+            "consecutive_doubles_count": 0,
+            "consecutive_doubles_rate": 0.0,
+            "uniform_doubles_rate": uniform_doubles,
+            "doubles_elevation_ratio": 0.0,
+            "fehu_count": len([i for i in indices if i == 0]),
+            "fehu_positions": [i for i, idx in enumerate(indices) if idx == 0],
+            "fehu_intervals": [],
+            "mean_fehu_interval": 0.0,
             "classification": "INSUFFICIENT_DATA",
             "recommendation": "Input must contain at least 2 runes.",
         }
@@ -424,6 +498,24 @@ def triage_cipher(ciphertext: str) -> dict:
     bigram_ic = compute_bigram_ic(indices)
     cond_entropy = compute_conditional_entropy(indices)
     word_lens = compute_word_length_distribution(ciphertext)
+
+    if analyze_f_skip_periodicity:
+        f_diag = analyze_f_skip_periodicity(ciphertext)
+    else:
+        consec_doubles = sum(1 for i in range(n - 1) if indices[i] == indices[i + 1])
+        d_rate = round(consec_doubles / (n - 1), 5)
+        fehu_pos = [i for i, idx in enumerate(indices) if idx == 0]
+        fehu_int = [fehu_pos[i + 1] - fehu_pos[i] for i in range(len(fehu_pos) - 1)]
+        f_diag = {
+            "consecutive_doubles_count": consec_doubles,
+            "consecutive_doubles_rate": d_rate,
+            "uniform_doubles_rate": uniform_doubles,
+            "doubles_elevation_ratio": round(d_rate / uniform_doubles, 3) if uniform_doubles > 0 else 1.0,
+            "fehu_count": len(fehu_pos),
+            "fehu_positions": fehu_pos,
+            "fehu_intervals": fehu_int,
+            "mean_fehu_interval": round(sum(fehu_int) / len(fehu_int), 2) if fehu_int else 0.0,
+        }
 
     # Classification rules calibrated against Liber Primus
     # English/solved LP: IC ~ 0.055-0.075, kappa ~ 1.6-2.2
@@ -450,6 +542,14 @@ def triage_cipher(ciphertext: str) -> dict:
         "bigram_ic": round(bigram_ic, 5),
         "conditional_entropy": cond_entropy,
         "word_lengths": word_lens,
+        "consecutive_doubles_count": f_diag.get("consecutive_doubles_count", 0),
+        "consecutive_doubles_rate": f_diag.get("consecutive_doubles_rate", 0.0),
+        "uniform_doubles_rate": f_diag.get("uniform_doubles_rate", uniform_doubles),
+        "doubles_elevation_ratio": f_diag.get("doubles_elevation_ratio", 0.0),
+        "fehu_count": f_diag.get("fehu_count", 0),
+        "fehu_positions": f_diag.get("fehu_positions", []),
+        "fehu_intervals": f_diag.get("fehu_intervals", []),
+        "mean_fehu_interval": f_diag.get("mean_fehu_interval", 0.0),
         "classification": classification,
         "recommendation": recommendation,
     }
@@ -1541,21 +1641,25 @@ def surrogate_shuffle_test(
     h: int = 10,
     n_max: int = 1000,
     family: Optional[str] = None,
+    n_trials: int = 1,
+    seed: Optional[int] = 3301,
 ) -> SurrogateTestResult:
     """
     Monte Carlo surrogate-data null distribution test.
     Supports fixed-N shuffle evaluation or Besag-Clifford sequential Monte Carlo early-stopping.
+    Uses an isolated local PRNG instance to guarantee global random state isolation.
     Computes empirical mean, standard deviation, Z-score, empirical p-value, and
-    look-elsewhere adjusted p-value (Sidak correction against ledger attempt count).
+    multi-testing adjusted p-value (Bonferroni if n_trials > 1, else Sidak via ledger count).
     """
     if len(indices) < 4:
         return SurrogateTestResult(0.0, 0.0, 0.0, False, p_value=1.0, p_adj=1.0, trials=0)
 
+    rng = random.Random(seed if seed is not None else 3301)
     null_scores = []
     shuffled = list(indices)
 
     def draw_shuffle():
-        random.shuffle(shuffled)
+        rng.shuffle(shuffled)
         s = score_composite_runes(shuffled)
         null_scores.append(s)
         return s
@@ -1566,6 +1670,7 @@ def surrogate_shuffle_test(
             draw_shuffle,
             h=h,
             n_max=n_max,
+            rng=rng,
         )
     else:
         for _ in range(n_shuffles):
@@ -1580,15 +1685,18 @@ def surrogate_shuffle_test(
 
     z_score = (candidate_score - mean_null) / std_null
 
-    # Look-elsewhere correction using ledger attempt count for hypothesis family
-    attempt_k = 1
-    if count_attempts:
-        try:
-            attempt_k = max(1, count_attempts(family=family))
-        except Exception:
-            attempt_k = 1
-    # Sidak correction: 1 - (1 - p)^K
-    p_adj = round(1.0 - math.pow(max(0.0, 1.0 - p_val), attempt_k), 5)
+    # Multi-testing correction: Bonferroni for n_trials > 1, else Sidak correction against ledger attempts
+    if n_trials > 1:
+        p_adj = round(min(1.0, p_val * n_trials), 5)
+    else:
+        attempt_k = 1
+        if count_attempts:
+            try:
+                attempt_k = max(1, count_attempts(family=family))
+            except Exception:
+                attempt_k = 1
+        # Sidak correction: 1 - (1 - p)^K
+        p_adj = round(1.0 - math.pow(max(0.0, 1.0 - p_val), attempt_k), 5)
 
     is_significant = (z_score >= 3.5 or p_adj < 0.01) and candidate_score >= -3.40
 
