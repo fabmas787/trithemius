@@ -26,10 +26,11 @@ flowchart TD
         MultiAgent["Multi-Agent Orchestrator (agents/crew.py)"]
     end
 
-    subgraph CoreEngine ["Cryptanalytic & Math Engines (0 VRAM)"]
+    subgraph CoreEngine ["Cryptanalytic & Math Engines (CPU / Metal GPU / ANE)"]
         Agrippa["Agrippa (ciphers/agrippa.py)\nGematria Primus & Sacred Math"]
         Kasiski["Kasiski (ciphers/kasiski.py)\nMod-29/26 Vigenère & Keystreams"]
         AlKindi["Al-Kindi (ciphers/al_kindi.py)\nChi-Squared & N-Gram Gatekeeper"]
+        Taxonomy["Taxonomy & Ciphers (ciphers/taxonomy.py + 14 modules)\nGF(29) Solver Suite & Hardware Accel"]
         OpSec["OpSec & Entropy (ciphers/opsec.py, entropy.py)\nPGP 7A35090F & Signal Analysis"]
     end
 
@@ -38,11 +39,11 @@ flowchart TD
         ChromaStore["Vector Store (ChromaDB + nomic-embed-text)"]
         BM25Store["Zero-VRAM BM25 Lexical Fallback"]
         Corpus["Corpus Files (corpus/*.md, *.txt)"]
-        Bacon["Bacon (scripts/bacon.py)\nLive Web Context"]
+        Bacon["Bacon (scripts/bacon.py)\n[ARCHIVED / ROADMAP]"]
     end
 
     subgraph Ingestion ["Intelligence Gathering & Hygiene"]
-        Walsingham["Walsingham (scripts/walsingham.py)\nBot-Resilient Web Harvester"]
+        Walsingham["Walsingham (scripts/walsingham.py)\n[ARCHIVED / ROADMAP]"]
         Porta["Porta (scripts/porta.py)\nLibrarian, Classifier & Dedup"]
         Bodleian["Bodleian (scripts/bodleian.py)\nPage-Aware Semantic Chunking"]
     end
@@ -75,7 +76,12 @@ flowchart TD
 
 ## 3. Cryptographic & Sacred Arithmetic Engines
 
-All cryptographic modules are written in native Python with LRU caching, operating in sub-millisecond execution times with zero GPU or machine learning dependencies.
+All core cryptographic algorithms are implemented in native Python with LRU caching, operating in sub-millisecond execution times with zero mandatory external or GPU dependencies, ensuring full portability across Linux, macOS, and Windows. 
+
+For high-throughput combinatorial key searches, compound phrase sweeps, and real-time neural plaintext scoring, Trithemius incorporates an optional hardware acceleration layer:
+- **Apple Silicon Metal GPU Compute Engine** (`ciphers/metal_accel.py`, `ciphers/metal_engine.m`, `ciphers/metal_engine.dylib`): Leverages Apple Silicon Metal compute shaders and Unified Memory Architecture (UMA) for parallel multi-candidate scoring and Monte Carlo surrogate shuffles.
+- **Apple Neural Engine (ANE) Interface** (`ciphers/ane_engine.py`): Utilizes the 16-core NPU via ONNX Runtime `CoreMLExecutionProvider` for local, zero-network candidate semantic scoring.
+- **Transparent CPU Fallback**: On Linux, Windows, or non-Apple environments, all modules automatically and transparently fall back to pure-Python and NumPy CPU execution paths with identical mathematical semantics and zero behavioral divergence.
 
 ### 3.1 Agrippa: Gematria Primus & Number Theory (`ciphers/agrippa.py`)
 Agrippa encodes the official 29-rune Anglo-Saxon Futhorc alphabet used by Cicada 3301 in the *Liber Primus*, where each rune maps to an index ($0$ to $28$) and a sacred prime number ($2$ to $109$).
@@ -112,6 +118,80 @@ Implements the comprehensive mathematical cryptanalysis taxonomy over the linear
 - **Surrogate-Data Null Hypothesis Testing**: Monte Carlo ciphertext shuffle tests ($N=50$) generating empirical $Z$-scores to prevent false-positive hallucination.
 - **Persistent Ledger Integration**: Automatically records all explored hypotheses, parameters, and decryptions into the SQLite database (`agents/ledger.py`) with canonical SHA-256 deduplication.
 
+### 3.5 Unicity: Identifiability Budget & Shannon Unicity Distance (`ciphers/unicity.py`)
+Computes the theoretical limits of cryptanalysis over $\mathbb{Z}_{29}$:
+- **Language Redundancy**: Determines per-symbol redundancy $D = \log_2(29) - H_L$ in bits per symbol.
+- **Shannon Unicity Distance**: Calculates the theoretical minimum ciphertext length $U = H(K) / D$ required to uniquely resolve a candidate key.
+- **Maximum Resolvable Period**: Estimates maximum solvable periodic key length $m_{\max} = N \cdot D / \log_2(29)$ for a given ciphertext length $N$.
+
+### 3.6 SPRT: Sequential Probability Ratio Test (`ciphers/sprt.py`)
+Wald's Sequential Probability Ratio Test for calibrated $\mathbb{Z}_{29}$ bigram language models:
+- **Hypothesis Testing**: Discriminates between null noise hypothesis $H_0$ (uniform distribution) and natural language hypothesis $H_1$ (calibrated bigram model).
+- **Early-Stopping Boundaries**: Terminates candidate scoring as soon as cumulative log-likelihood crosses Wald's decision thresholds $A = \ln((1-\beta)/\alpha)$ or $B = \ln(\beta/(1-\alpha))$, delivering high-throughput candidate filtering.
+
+### 3.7 Difference: Difference-Domain Constraint Solving & Sacred Sequences (`ciphers/difference.py`)
+Difference-domain cryptanalysis and extended number-theoretic sequence generation:
+- **Difference Transformations**: Transforms ciphertexts to difference representations $\Delta_i = (c_i - c_{i-1}) \bmod 29$.
+- **Keystream Constraint Satisfaction (CSP)**: Prunes candidate keystreams using the zero-hole constraint ($\Delta c_i \neq 0$), filtering shifts that would produce invalid consecutive symbols.
+- **Extended Sacred Sequences**: Computes Möbius $\mu(n)$, Liouville $\lambda(n)$, Carmichael $\lambda(n)$, and divisor functions $\sigma(n), d(n), \omega(n), \Omega(n)$ with SHA-256 sequence fingerprint deduplication.
+
+### 3.8 LagCoinc: Exact Coincidence Spectrum via 29-Channel FFT (`ciphers/lagcoinc.py`)
+Vectorized computation of the complete coincidence spectrum $\kappa(d) = \sum I(c_i = c_{i+d})$ across all lags $d \in [1, L-1]$:
+- **Indicator FFT**: Decomposes text into 29 binary indicator channels and uses Fast Fourier Transforms for $O(29 \cdot N \log N)$ complexity.
+- **NumPy & Pure-Python Modes**: Automatic fallback between vectorized NumPy operations and pure-Python FFT implementations.
+
+### 3.9 Interrupter: Dynamic Keystream Interrupter Engine (`ciphers/interrupter.py`)
+Modular, dynamic keystream mutation and scheduling engine modeling the mechanisms in solved Liber Primus pages (Pages 03–04, 14–15):
+- **Canonical 29-Rune Alignment**: Corrects flawed literature by preserving all 29 Futhorc runes and canonical key shifts (`DIVINITY`, `FIRFUMFERENFE`).
+- **Dynamic Interrupter Modes**: Bijective bidirectional encoding and decoding with 5 interrupt configurations, supporting cleartext Fehu preservation, ciphertext matching, key pausing vs. advancing, and positional masks.
+
+### 3.10 Running Key: Running-Key & Book Cipher Engine (`ciphers/running_key.py`)
+Cryptanalysis engine for running-key and book ciphers over $\text{GF}(29)$ Futhorc:
+- **Multi-Mode Decryption**: Supports standard subtraction, addition, and variant Beaufort modes.
+- **Dynamic Fehu-Skip Propagation**: Accurately pauses keystream pointers when encountering cleartext Fehu (0).
+- **Sliding-Window Corpus Scanning**: Scans candidate reference literature and historical texts against unsolved target pages with automated linguistic evaluation.
+
+### 3.11 Affine: Semantic Normal Form & Group Reductions (`ciphers/affine.py`)
+Group-theoretic reduction of modular pipelines over $\mathbb{Z}_{29}$:
+- **Canonical Form Collapse**: Reduces arbitrary chains of Atbash, Caesar shifts, and affine mappings into their unique canonical irreducible $(a, b)$ form: $x \mapsto (ax + b) \bmod 29$ with $\gcd(a, 29) = 1$.
+- **Group Structures**: Encodes cyclic shifts $C_{29}$, dihedral group $D_{29}$ (order 58), and the full 812-element affine group $\text{Aff}(\mathbb{Z}_{29})$.
+
+### 3.12 Fingerprint: Statistical Fingerprint & Forward Simulation (`ciphers/fingerprint.py`)
+Likelihood-free inference (Analysis-by-Synthesis) for $\mathbb{Z}_{29}$ ciphertexts:
+- **Empirical Manuscript Profiles**: Forward-simulates candidate cipher families on known plaintext and compares summary feature vectors (doublet rate, $Z$-score, $N \cdot \text{IoC}$, consecutive difference zero suppression) against the empirical Liber Primus unsolved manuscript baseline.
+
+### 3.13 Container: Polyglot Container Grammar & Overlay Analysis (`ciphers/container.py`)
+Deep container-layer inspection, logical EOF detection, and hidden payload extraction:
+- **Grammar Parsers**: Walks structure to true logical EOF for JPEG (JFIF/EXIF), PNG (chunk CRCs to `IEND`), GIF (trailer `0x3B`), ZIP (`EOCD`), and PDF (`%%EOF`).
+- **Overlay & Steganography**: Isolates appended overlay bytes, computes Shannon entropy, extracts nested containers, and identifies ASCII-armored PGP messages embedded in media headers.
+
+### 3.14 Layout: Layout Side-Channel Mutual Information (`ciphers/layout.py`)
+Analyzes Liber Primus pages as multiplexed streams of symbols and physical layout features:
+- **Carrier Mutual Information**: Estimates mutual information $I(\text{layout} ; \text{keystream shift})$ between layout boundaries (separators `᛫`, `᛬`, `᛭`, word lengths, line breaks) and candidate shifts.
+- **Statistical Validation**: Applies Miller-Madow bias correction and Besag-Clifford sequential Monte Carlo permutation tests.
+
+### 3.15 Lexicon: Master Keyword & Candidate Vocabulary Engine (`ciphers/lexicon.py`)
+Centralized candidate wordlist and mathematical transformation engine:
+- **Curated Vocabularies**: Aggregates philosophical, mathematical, occult, and historical Cicada 3301 keywords.
+- **Multi-Vector Transforms**: Generates forward, reversed, Atbash, prime mod 29, and variant Beaufort representations for fast $O(1)$ prefix and set-membership tests during crib dragging.
+
+### 3.16 Zimmermann: Native RFC 4880 OpenPGP Verification (`ciphers/zimmermann.py`)
+Native implementation of RFC 4880 OpenPGP signature verification:
+- **Zero-Dependency Cryptography**: Pure Python implementation of RSA signature verification and PKCS#1 v1.5 padding checks using constant-time comparison (`hmac.compare_digest`).
+- **Hash Support**: Validates SHA-256, SHA-384, SHA-512, SHA-224, and SHA-1 against pinned Cicada 3301 public keys.
+
+### 3.17 KeyMap: Canonical Byte $\to \mathbb{Z}_{29}$ Keystream Mapping (`ciphers/keymap.py`)
+Mathematical pipelines for translating arbitrary byte sequences (PGP blocks, hash digests, binary headers) into $\mathbb{Z}_{29}$ keystreams:
+- **Mapping Modes**: Supports naive modulo (`mod29`), rejection sampling for bytes $< 232$ (`reject232`) for uniform distribution, and big-integer positional base-29 expansion (`base29`).
+
+### 3.18 HashHunt: Local 512-bit Hash Combinatorial Lattice (`ciphers/hash_hunt.py`)
+Combinatorial search engine targeting the 512-bit digest on Page 56 / 73:
+- **Normalization Lattice**: Screens candidate text against target digests across SHA-512, SHA3-512, and BLAKE2b, systematically permuting encodings (UTF-8, ASCII, UTF-16) and line-ending styles (LF, CRLF, stripped).
+
+### 3.19 Canonical Solvers & Forensic Provenance (`ciphers/solved_pages.py`, `ciphers/provenance.py`)
+- **`solved_pages.py`**: Exact implementations and test vectors for all 9 historically solved Liber Primus pages.
+- **`provenance.py`**: Tracks metadata provenance, source transcripts, and cryptographic artifact chains.
+
 ---
 
 ## 4. Signal Intelligence & OpSec Verification
@@ -132,8 +212,11 @@ Calculates information density to distinguish plaintext from encrypted or compre
 
 ## 5. Intelligence Gathering & Corpus Management
 
-### 5.1 Walsingham: Anti-Bot Web Intelligence Scout (`scripts/walsingham.py`)
-Named after Queen Elizabeth I's spymaster, Walsingham gathers research and page transcripts autonomously from the web.
+### 5.1 Walsingham: Anti-Bot Web Intelligence Scout (`scripts/walsingham.py`) [ARCHIVED / ROADMAP COMPONENT]
+
+> **Component Status**: `[ARCHIVED / ROADMAP COMPONENT]`. Web harvesting functionality is currently archived and superseded by the offline, reproducible **Bodleian + Porta + RAG** pipeline. All corpus analysis operates strictly on curated, local, verified transcripts without external network dependencies.
+
+Named after Queen Elizabeth I's spymaster, Walsingham was designed to gather research and page transcripts autonomously from the web:
 - **Multi-Engine Reconnaissance**: Queries DuckDuckGo Lite, DuckDuckGo API, Wikipedia Knowledge API, GitHub Solver Repositories, and the Internet Archive Wayback Machine.
 - **Anti-Bot Resilience**: Automatically rotates realistic browser user-agents, applies exponential backoff with random jitter, and employs a circuit-breaker pattern to avoid IP bans.
 - **Direct Verified Mirrors**: Contains fallback URLs and pre-seeded archival mirrors for crucial Liber Primus pages.
@@ -189,7 +272,7 @@ The retrieval engine in `scripts/ask.py` employs a resilient fallback hierarchy:
    - Computes term frequency and inverse document frequency with document length normalization ($k_1 = 1.5, b = 0.75$).
    - Applies relevance boosts for Futhorc runes, Gematria terms, PGP signatures, and targeted Liber Primus page numbers.
    - Executes in $<10\text{ms}$ with zero memory or model overhead.
-3. **Live Web Reconnaissance (Bacon)**: When requested via `/web <query>`, live web search snippets from DuckDuckGo are retrieved and merged into the context budget.
+3. **Live Web Reconnaissance (Bacon)** `[ARCHIVED / ROADMAP COMPONENT]`: When requested via `/web <query>`, live web search snippets from DuckDuckGo are retrieved and merged into the context budget (archived in favor of offline deterministic local RAG).
 4. **Context Budgeting**: Strictly budgets retrieved context to 2500 characters, guaranteeing prompt evaluation times under 3 seconds while preserving source document provenance.
 
 ---
@@ -257,17 +340,49 @@ python3 trithemius.py --low-spec --ollama-host http://remote-gpu:11434 ask "What
 
 ## 10. Automated Test & Regression Baseline
 
-The test suite contains 115 automated unit and regression tests executing in under 2 seconds:
-- `tests/test_cryptanalysis_taxonomy.py` (13 tests): Validates calibrated GF(29) language models, statistical triage, consensus period detection, difference periodograms, separable T-tables, Berlekamp–Massey linear complexity, stream hash bank matching, surrogate shuffle tests, and full cascade solvers.
-- `tests/test_interrupter.py` (11 tests): Validates canonical 29-rune alphabet integrity, mathematical key shifts (DIVINITY, FIRFUMFERENFE), and bidirectional dynamic interrupter execution.
-- `tests/test_router.py` (16 tests): Validates deterministic routing, exact Liber Primus transcript caching, and hybrid query dispatch.
-- `tests/test_level1_optimizations.py` (11 tests): Validates Level 1 canonical deduplication and SQLite ledger migrations.
-- `tests/test_providers.py` (8 tests): Validates Ollama streaming, Groq/OpenAI SSE parsing, Gemini SSE parsing, Anthropic message parsing, missing key validation, and bearer authorization headers.
-- `tests/test_rag_chat.py` (11 tests): Validates prompt character budgeting, reasoning token streams, BM25 retrieval ranking, and zero-VRAM fallback.
-- `tests/test_terminal_workstation.py` (14 tests): Validates Gematria arithmetic roundtrips, Mod-29/26 Vigenère solvers, OpSec PGP identification, Shannon entropy, and CLI telemetry.
-- `tests/test_walsingham.py` (22 tests): Validates anti-bot web scraping, Wayback Machine fallbacks, User-Agent rotation, and archival mirror seeding.
+The test suite contains 367 automated unit and regression tests executing across 39 test modules:
+- **Canonical Solvers & Solved Pages**:
+  - `tests/test_canonical_solved_pages.py` (35 tests): Validates exact solutions for all 9 historically solved Liber Primus pages against wiki reference plaintext.
+  - `tests/test_solved_pages.py` (33 tests): Validates deterministic end-to-end execution of canonical Liber Primus solvers.
+  - `tests/test_exact_solver_and_statistical_rigor.py` (10 tests): Validates exact mathematical bounds and statistical rigor.
+  - `tests/test_cryptanalyze_page56.py` (9 tests): Validates Page 56 cascade cryptanalysis and totient stream pipelines.
+- **Advanced Cryptanalysis, Statistical Rigor & GF(29) Taxonomy**:
+  - `tests/test_cryptanalysis_taxonomy.py` (13 tests): Validates calibrated GF(29) language models, statistical triage, consensus period detection, difference periodograms, separable T-tables, Berlekamp–Massey linear complexity, stream hash bank matching, surrogate shuffle tests, and full cascade solvers.
+  - `tests/test_taxonomy_hybrid_model.py` (3 tests): Validates hybrid GF(29) language models and smoothed transition matrices.
+  - `tests/test_al_kindi_statistical_rigor.py` (5 tests): Validates chi-squared goodness-of-fit, English n-gram likelihoods, and composite verdicts.
+  - `tests/test_sprt.py` (4 tests): Validates Wald's Sequential Probability Ratio Test early-stopping decision boundaries.
+  - `tests/test_difference.py` (6 tests): Validates difference-domain constraint satisfaction and extended sacred sequences.
+  - `tests/test_lagcoinc.py` (3 tests): Validates 29 indicator-channel FFT coincidence spectrums with NumPy and pure-Python modes.
+  - `tests/test_unicity.py` (4 tests): Validates Shannon unicity distance and language redundancy bounds.
+  - `tests/test_affine.py` (5 tests): Validates canonical reduction of modular transformations over $\text{Aff}(\mathbb{Z}_{29})$.
+  - `tests/test_entropy_z29.py` (4 tests): Validates entropy profiling and signal classification.
+- **Ciphers, Keystreams, Interrupters & Key Management**:
+  - `tests/test_interrupter.py` (11 tests): Validates canonical 29-rune alphabet integrity, mathematical key shifts (DIVINITY, FIRFUMFERENFE), and bidirectional dynamic interrupter execution.
+  - `tests/test_running_key.py` (17 tests): Validates GF(29) running key and book cipher engines with Fehu-skip support.
+  - `tests/test_keymap.py` (3 tests): Validates byte-to-$\mathbb{Z}_{29}$ mapping modes (mod29, reject232, base29).
+  - `tests/test_lexicon_rotation.py` (7 tests): Validates candidate keyword transforms and dictionary rotation.
+  - `tests/test_fingerprint.py` (4 tests): Validates statistical fingerprint forward simulations.
+  - `tests/test_hash_hunt.py` (4 tests): Validates 512-bit hash combinatorial normalization lattices.
+  - `tests/test_zimmermann.py` (5 tests): Validates native OpenPGP RFC 4880 v4 and RSA signature verification.
+- **Hardware Acceleration & Optimizations**:
+  - `tests/test_metal_accel.py` (10 tests): Validates Apple Silicon Metal GPU compute engine with graceful CPU fallback.
+  - `tests/test_level1_optimizations.py` (15 tests): Validates Level 1 canonical deduplication and SQLite ledger migrations.
+- **Containers, Layout & Forensic Metadata**:
+  - `tests/test_container_and_metadata.py` (10 tests): Validates JPEG/PNG/GIF/ZIP/PDF container grammar and overlay extraction.
+  - `tests/test_layout.py` (11 tests): Validates layout side-channel mutual information and permutation testing.
+  - `tests/test_provenance.py` (4 tests) & `tests/test_evidence.py` (3 tests): Validates forensic metadata provenance.
+  - `tests/test_corpus_enumeration.py` (5 tests) & `tests/test_vector_attempts.py` (7 tests): Validates corpus integrity and vector storage.
+- **Workstation UI, Routing & Inference**:
+  - `tests/test_terminal_workstation.py` (34 tests): Validates Gematria arithmetic roundtrips, Mod-29/26 Vigenère solvers, OpSec PGP identification, Shannon entropy, and CLI telemetry.
+  - `tests/test_router.py` (29 tests): Validates deterministic routing, exact Liber Primus transcript caching, and hybrid query dispatch.
+  - `tests/test_providers.py` (12 tests): Validates Ollama streaming, Groq/OpenAI SSE parsing, Gemini SSE parsing, Anthropic message parsing, missing key validation, and bearer authorization headers.
+  - `tests/test_rag_chat.py` (15 tests): Validates prompt character budgeting, reasoning token streams, BM25 retrieval ranking, and zero-VRAM fallback.
+  - `tests/test_commands.py` (3 tests), `tests/test_settings.py` (3 tests), `tests/test_results_and_renderers.py` (9 tests): Validates CLI command parsing and formatting.
+- **Architecture, Determinism & Golden Masters**:
+  - `tests/test_golden_master.py` (2 tests): Validates byte-level output consistency across CLI and REPL sessions against golden master references.
+  - `tests/test_architecture.py` (4 tests), `tests/test_domain_services.py` (3 tests), `tests/test_import_determinism.py` (3 tests): Validates clean architectural boundaries, zero circular dependencies, and deterministic imports.
 
 Running the full suite:
 ```bash
-./venv/bin/python -m unittest discover tests
+./venv/bin/python -m unittest discover -s tests
 ```

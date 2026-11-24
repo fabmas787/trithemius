@@ -9,16 +9,16 @@ Each module is named after a historical cryptographer, philosopher, or scholar w
 - **Kasiski** (Friedrich Kasiski, 1805–1881): Pioneer of polyalphabetic cryptanalysis — Vigenère mod-29 solver & keystreams.
 - **Al-Kindi** (Abu Yusuf Al-Kindi, 801–873): Inventor of frequency analysis — Chi-squared & quadgram statistical gatekeeper.
 - **Bodley** (Sir Thomas Bodley, 1545–1613): Founder of the Bodleian Library — Page-aware chunking & ChromaDB vector ingestion.
-- **Walsingham** (Sir Francis Walsingham, 1532–1590): Spymaster to Queen Elizabeth I — Autonomous, anti-bot web scout & intelligence harvester.
 - **Porta** (Giambattista della Porta, 1535–1615): Renaissance author of *De Furtivis Literarum Notis* — Corpus classifier, standardized renaming & deduplication.
-- **Bacon** (Roger Bacon, 1220–1292): Medieval empiricist — Live DuckDuckGo search context injection.
+- **Walsingham** (Sir Francis Walsingham, 1532–1590) `[ARCHIVIATO / ROADMAP COMPONENT]`: Spymaster to Queen Elizabeth I — Autonomous web scout (archiviato, sostituito dalla pipeline offline Bodleian + Porta + RAG).
+- **Bacon** (Roger Bacon, 1220–1292) `[ARCHIVIATO / ROADMAP COMPONENT]`: Medieval empiricist — Live DuckDuckGo search context injection.
 
 ---
 
 ## Architecture Overview
 
 ```
-[Web / Mirrors] ──(Anti-Bot Protection)──► [scripts/walsingham.py] (Autonomous Harvester, 0 VRAM)
+[Web / Archivio Storico] ──► [scripts/walsingham.py] [ARCHIVIATO / ROADMAP]
                                                     │
                                                     ▼
                                            [corpus/ Directory]
@@ -39,7 +39,7 @@ Each module is named after a historical cryptographer, philosopher, or scholar w
 
 1. **trithemius.py** — Unified terminal-first cryptanalytic workstation (interactive REPL + CLI subcommands).
 2. **corpus/** — Raw text: page transcripts, forum threads, reference index (`pages_index.json`).
-3. **scripts/walsingham.py** — Autonomous web scout with anti-bot resilience (rotates User-Agents, backoff, jitter, circuit breaker).
+3. **scripts/walsingham.py** `[ARCHIVIATO / ROADMAP COMPONENT]` — Autonomous web scout con anti-bot resilience (archiviato, sostituito stabilmente dalla pipeline locale deterministica Bodleian + Porta + RAG).
 4. **scripts/porta.py** — Corpus librarian (identifies page numbers, standardizes filenames, removes duplicates).
 5. **scripts/bodleian.py** — Shannon entropy sliding-window chunking, rune detection, and ChromaDB vector ingestion.
 6. **scripts/ask.py** — Hybrid RAG query engine with streaming token output and page filtering (`/page 56`).
@@ -47,9 +47,9 @@ Each module is named after a historical cryptographer, philosopher, or scholar w
 8. **ciphers/agrippa.py** — Official 29-rune Gematria Primus mapping, prime values (2..109), word sums, rune Atbash, Euler's totients.
 9. **ciphers/kasiski.py** — Modulo-29 Rune Vigenère solver, Cicada keystreams (primes, Fibonacci, totients), English IoC + Friedman test.
 10. **ciphers/al_kindi.py** — Chi-squared goodness-of-fit, English quadgram/trigram likelihood, dictionary vocabulary validation.
-11. **ciphers/taxonomy.py** — Advanced GF(29) cryptanalytic taxonomy suite: calibrated language model, triage statistics, consensus period estimation, separable T-table solver, O(m) dictionary search, Berlekamp-Massey crib dragging, deterministic stream sweeps, and surrogate shuffle testing.
-12. **ciphers/entropy.py** — Shannon entropy $H(X)$, sliding-window boundary cuts, signal feature vector $\vec{F}$.
-13. **ciphers/opsec.py** — PGP authenticity verification against official Cicada 3301 Key `7A35090F` & magic bytes inspection.
+11. **ciphers/taxonomy.py** (+ 14 moduli ciphers) — Suite tassonomica avanzata GF(29), modelli linguistici calibrati, periodogrammi, T-table solver, crib dragging, surrogate tests, e i moduli `unicity`, `sprt`, `difference`, `lagcoinc`, `interrupter`, `running_key`, `affine`, `fingerprint`, `container`, `layout`, `lexicon`, `zimmermann`, `keymap`, `hash_hunt`.
+12. **ciphers/metal_accel.py & ane_engine.py** — Accelerazione hardware opzionale Apple Silicon Metal GPU e Apple Neural Engine (ANE CoreML) con fallback trasparente su CPU.
+13. **ciphers/entropy.py & opsec.py** — Shannon entropy $H(X)$, sliding-window boundary cuts, feature vector $\vec{F}$, verifica PGP Cicada `7A35090F`.
 14. **archive/gui/** — Archived browser interface and legacy HTTP daemon.
 
 ---
@@ -188,7 +188,10 @@ Verrà avviata la shell interattiva con prompt `trithemius>` e completamento aut
 
 ---
 
-## GUIDA 2: Utilizzo del Solo Web Scraper Autonomo (`walsingham.py`)
+## GUIDA 2: Utilizzo del Solo Web Scraper Autonomo (`walsingham.py`) [ARCHIVIATO / ROADMAP COMPONENT]
+
+> [!NOTE]
+> **Nota Architetturale**: Lo script `scripts/walsingham.py` è archiviato (`[ARCHIVED / ROADMAP COMPONENT]`) ed è stato sostituito dalla pipeline deterministica e offline **Bodleian + Porta + RAG**. L'acquisizione, la deduplicazione e l'ingestione del corpus operano ora al 100% in locale senza dipendenze da scraping web esterno. Questa sezione è conservata a fini di riferimento storico e architetturale.
 
 Se vuoi raccogliere trascrizioni runiche, indizi e discussioni dal web **senza sprecare risorse e senza avviare alcun modello LLM in VRAM (0% VRAM)**:
 
@@ -237,21 +240,18 @@ python3 scripts/porta.py --dedup
 
 ## Pipeline di Lavoro Consigliata
 
-Quando vuoi arricchire il sistema e fare una sessione di ricerca:
+Quando vuoi arricchire il sistema e fare una sessione di ricerca (pipeline locale e deterministica):
 
-1. **Raccogli i dati (0 VRAM)**:
-   ```bash
-   python3 scripts/walsingham.py --query "cicada 3301 liber primus unsolved pages"
-   ```
-2. **Organizza il corpus (0 VRAM)**:
+1. **Organizza e Classifica il Corpus (Porta, 0 VRAM)**:
    ```bash
    python3 scripts/porta.py
    ```
-3. **Ingestione Vettoriale con Entropia**:
+   *(Nota: lo scraper `walsingham.py` è archiviato; la pipeline opera sul corpus locale curato).*
+2. **Ingestione Vettoriale con Entropia (Bodleian)**:
    ```bash
    python3 scripts/bodleian.py
    ```
-4. **Avvia la Workstation ed Interroga Trithemius**:
+3. **Avvia la Workstation ed Interroga Trithemius**:
    ```bash
    python3 trithemius.py
    ```
@@ -306,4 +306,4 @@ Per verificare in ogni momento la suite completa di test:
 ```bash
 ./venv/bin/python -m unittest discover -s tests
 ```
-Tutti i 352 test unitari e di integrazione passano al 100% senza regressioni.
+Tutti i 367 test unitari e di integrazione passano al 100% senza regressioni.
