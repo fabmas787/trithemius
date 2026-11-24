@@ -21,21 +21,33 @@ from typing import List, Dict, Tuple, Optional
 import ollama
 import chromadb
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-from entropy import shannon_entropy, index_of_coincidence, is_high_entropy
-from opsec import inspect_pgp_text
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 try:
-    from porta import normalized_sha256
+    from ciphers.entropy import shannon_entropy, index_of_coincidence, is_high_entropy
+    from ciphers.opsec import inspect_pgp_text
+except ImportError:
+    from entropy import shannon_entropy, index_of_coincidence, is_high_entropy
+    from opsec import inspect_pgp_text
+
+try:
+    from scripts.porta import normalized_sha256
 except ImportError:
     try:
-        from scripts.porta import normalized_sha256
+        from porta import normalized_sha256
     except ImportError:
         normalized_sha256 = None
+
 try:
-    from agrippa import decode_runes, gematria_prime_sum
+    from ciphers.agrippa import decode_runes, gematria_prime_sum
 except ImportError:
-    decode_runes = None
-    gematria_prime_sum = None
+    try:
+        from agrippa import decode_runes, gematria_prime_sum
+    except ImportError:
+        decode_runes = None
+        gematria_prime_sum = None
 
 from pathlib import Path
 import time

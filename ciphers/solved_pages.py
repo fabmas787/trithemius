@@ -35,28 +35,47 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 CORPUS_DIR = os.path.join(BASE_DIR, "corpus")
 
 import sys
-for d in (BASE_DIR, CURRENT_DIR):
-    if d not in sys.path:
-        sys.path.insert(0, d)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    INDEX_BY_RUNE,
-    decode_runes,
-    direct_translation,
-    latin_to_rune,
-    rune_atbash,
-    rune_atbash_shift,
-)
-from interrupter import (
-    KOAN2_F_SKIP_POSITIONS,
-    WELCOME_F_SKIP_POSITIONS,
-    rune_vigenere_decode_f_skip,
-    verify_f_skip_alignment,
-)
-from kasiski import (
-    prime_totient_stream_decode,
-    rune_vigenere_decode,
-)
+try:
+    from ciphers.agrippa import (
+        INDEX_BY_RUNE,
+        decode_runes,
+        direct_translation,
+        latin_to_rune,
+        rune_atbash,
+        rune_atbash_shift,
+    )
+    from ciphers.interrupter import (
+        KOAN2_F_SKIP_POSITIONS,
+        WELCOME_F_SKIP_POSITIONS,
+        rune_vigenere_decode_f_skip,
+        verify_f_skip_alignment,
+    )
+    from ciphers.kasiski import (
+        prime_totient_stream_decode,
+        rune_vigenere_decode,
+    )
+except ImportError:
+    from agrippa import (
+        INDEX_BY_RUNE,
+        decode_runes,
+        direct_translation,
+        latin_to_rune,
+        rune_atbash,
+        rune_atbash_shift,
+    )
+    from interrupter import (
+        KOAN2_F_SKIP_POSITIONS,
+        WELCOME_F_SKIP_POSITIONS,
+        rune_vigenere_decode_f_skip,
+        verify_f_skip_alignment,
+    )
+    from kasiski import (
+        prime_totient_stream_decode,
+        rune_vigenere_decode,
+    )
 
 
 @dataclass(frozen=True)

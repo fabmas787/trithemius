@@ -23,18 +23,27 @@ import os
 import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for d in (BASE_DIR, os.path.join(BASE_DIR, "ciphers")):
-    if d not in sys.path:
-        sys.path.insert(0, d)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from agrippa import INDEX_BY_RUNE, decode_runes, latin_to_rune
-from al_kindi import is_plausible_english
-from kasiski import (
-    generate_prime_totients,
-    prime_totient_stream_decode,
-    prime_totient_stream_encode,
-    rune_index_of_coincidence,
-)
+try:
+    from ciphers.agrippa import INDEX_BY_RUNE, decode_runes, latin_to_rune
+    from ciphers.al_kindi import is_plausible_english
+    from ciphers.kasiski import (
+        generate_prime_totients,
+        prime_totient_stream_decode,
+        prime_totient_stream_encode,
+        rune_index_of_coincidence,
+    )
+except ImportError:
+    from agrippa import INDEX_BY_RUNE, decode_runes, latin_to_rune
+    from al_kindi import is_plausible_english
+    from kasiski import (
+        generate_prime_totients,
+        prime_totient_stream_decode,
+        prime_totient_stream_encode,
+        rune_index_of_coincidence,
+    )
 
 
 def resolve_input(target: str) -> str:

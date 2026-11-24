@@ -10,11 +10,8 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-CIPHERS_DIR = os.path.join(BASE_DIR, "ciphers")
-if CIPHERS_DIR not in sys.path:
-    sys.path.insert(0, CIPHERS_DIR)
 
-from lagcoinc import coincidence_by_lag, coincidence_by_lag_pure, coincidence_by_lag_numpy, HAS_NUMPY
+from ciphers.lagcoinc import coincidence_by_lag, coincidence_by_lag_pure, coincidence_by_lag_numpy, HAS_NUMPY
 
 
 class TestLagCoincidence(unittest.TestCase):

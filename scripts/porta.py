@@ -27,10 +27,18 @@ import argparse
 from collections import defaultdict
 from typing import List, Dict, Tuple, Optional, Union, Any
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-from agrippa import gematria_prime_sum
-from entropy import shannon_entropy, index_of_coincidence
-from opsec import inspect_pgp_text
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+try:
+    from ciphers.agrippa import gematria_prime_sum
+    from ciphers.entropy import shannon_entropy, index_of_coincidence
+    from ciphers.opsec import inspect_pgp_text
+except ImportError:
+    from agrippa import gematria_prime_sum
+    from entropy import shannon_entropy, index_of_coincidence
+    from opsec import inspect_pgp_text
 
 CORPUS_DIR = os.path.join(os.path.dirname(__file__), "..", "corpus")
 SYSTEM_RESERVED_FILES = {

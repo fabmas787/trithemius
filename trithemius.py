@@ -8,14 +8,10 @@ Named for Johannes Trithemius (1462–1516), father of steganography and cryptog
 import os
 import sys
 
-# Ensure project root and subpackages are in sys.path
+# Ensure project root is in sys.path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-for sub in ("ciphers", "scripts", "agents"):
-    sub_p = os.path.join(BASE_DIR, sub)
-    if sub_p not in sys.path:
-        sys.path.insert(0, sub_p)
 
 from workstation.core.workstation import (
     TerminalWorkstation,

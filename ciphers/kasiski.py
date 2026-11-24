@@ -23,20 +23,38 @@ import sys
 import functools
 from typing import List, Union, Tuple, Dict, Optional, Set
 
-sys.path.insert(0, os.path.dirname(__file__))
-from agrippa import (
-    INDEX_BY_RUNE, RUNE_BY_INDEX, index_to_rune, rune_to_index,
-    latin_to_rune, decode_runes, euler_totient, is_prime
-)
-from interrupter import (
-    InterrupterConfig, InterruptMode,
-    rune_vigenere_decode_dynamic, rune_vigenere_encode_dynamic,
-    rune_vigenere_decode_f_skip, rune_vigenere_encode_f_skip,
-    verify_f_skip_alignment,
-    WELCOME_F_SKIP_POSITIONS, KOAN2_F_SKIP_POSITIONS,
-    canonical_key_shifts, divinity_shifts, firfumferenfe_shifts,
-    validate_canonical_alphabet
-)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+try:
+    from ciphers.agrippa import (
+        INDEX_BY_RUNE, RUNE_BY_INDEX, index_to_rune, rune_to_index,
+        latin_to_rune, decode_runes, euler_totient, is_prime
+    )
+    from ciphers.interrupter import (
+        InterrupterConfig, InterruptMode,
+        rune_vigenere_decode_dynamic, rune_vigenere_encode_dynamic,
+        rune_vigenere_decode_f_skip, rune_vigenere_encode_f_skip,
+        verify_f_skip_alignment,
+        WELCOME_F_SKIP_POSITIONS, KOAN2_F_SKIP_POSITIONS,
+        canonical_key_shifts, divinity_shifts, firfumferenfe_shifts,
+        validate_canonical_alphabet
+    )
+except ImportError:
+    from agrippa import (
+        INDEX_BY_RUNE, RUNE_BY_INDEX, index_to_rune, rune_to_index,
+        latin_to_rune, decode_runes, euler_totient, is_prime
+    )
+    from interrupter import (
+        InterrupterConfig, InterruptMode,
+        rune_vigenere_decode_dynamic, rune_vigenere_encode_dynamic,
+        rune_vigenere_decode_f_skip, rune_vigenere_encode_f_skip,
+        verify_f_skip_alignment,
+        WELCOME_F_SKIP_POSITIONS, KOAN2_F_SKIP_POSITIONS,
+        canonical_key_shifts, divinity_shifts, firfumferenfe_shifts,
+        validate_canonical_alphabet
+    )
 
 ALPHABET = string.ascii_uppercase
 ALPHABET_SET = set(ALPHABET)
@@ -456,14 +474,20 @@ def prime_totient_stream_encode(
 
 def rune_difference_periodogram(rune_text: str, max_lag: int = 30) -> Dict[int, float]:
     """Comb filter measuring chi-squared deviation across all 29 difference bins."""
-    from taxonomy import difference_periodogram, clean_runes_to_indices
+    try:
+        from ciphers.taxonomy import difference_periodogram, clean_runes_to_indices
+    except ImportError:
+        from taxonomy import difference_periodogram, clean_runes_to_indices
     indices = clean_runes_to_indices(rune_text)
     return difference_periodogram(indices, max_lag=max_lag)
 
 
 def consensus_rune_key_length(rune_text: str, max_period: int = 30) -> List[Tuple[int, float, dict]]:
     """Consensus key length estimation ensembling Kasiski, periodogram, and column-IoC."""
-    from taxonomy import consensus_key_length_estimation
+    try:
+        from ciphers.taxonomy import consensus_key_length_estimation
+    except ImportError:
+        from taxonomy import consensus_key_length_estimation
     return consensus_key_length_estimation(rune_text, max_period=max_period)
 
 
@@ -472,19 +496,28 @@ GATEKEEPER_THRESHOLD: float = -3.38
 
 def score_unigram(indices: List[int]) -> float:
     """Average unigram log-likelihood per rune under calibrated model."""
-    from taxonomy import score_unigram as _score_unigram
+    try:
+        from ciphers.taxonomy import score_unigram as _score_unigram
+    except ImportError:
+        from taxonomy import score_unigram as _score_unigram
     return _score_unigram(indices)
 
 
 def score_composite_runes(indices: List[int]) -> float:
     """Composite linguistic fitness score combining bigram, unigram, and canonical crib bonuses."""
-    from taxonomy import score_composite_runes as _score_composite_runes
+    try:
+        from ciphers.taxonomy import score_composite_runes as _score_composite_runes
+    except ImportError:
+        from taxonomy import score_composite_runes as _score_composite_runes
     return _score_composite_runes(indices)
 
 
 def score_quadgram(text: str) -> float:
     """Compute normalized quadgram/trigram score for decrypted text."""
-    from al_kindi import ngram_score
+    try:
+        from ciphers.al_kindi import ngram_score
+    except ImportError:
+        from al_kindi import ngram_score
     return ngram_score(text)
 
 

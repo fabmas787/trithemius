@@ -10,13 +10,24 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-from agrippa import decode_runes, latin_to_rune
-from kasiski import (
-    vigenere_decode, rune_vigenere_decode, rune_vigenere_encode,
-    generate_primes
-)
-from al_kindi import is_plausible_english
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+try:
+    from ciphers.agrippa import decode_runes, latin_to_rune
+    from ciphers.kasiski import (
+        vigenere_decode, rune_vigenere_decode, rune_vigenere_encode,
+        generate_primes
+    )
+    from ciphers.al_kindi import is_plausible_english
+except ImportError:
+    from agrippa import decode_runes, latin_to_rune
+    from kasiski import (
+        vigenere_decode, rune_vigenere_decode, rune_vigenere_encode,
+        generate_primes
+    )
+    from al_kindi import is_plausible_english
 
 CASES_PATH = os.path.join(os.path.dirname(__file__), "regression_cases.json")
 

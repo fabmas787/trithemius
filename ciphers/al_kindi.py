@@ -69,11 +69,11 @@ CORE_WORDS = {
 
 # Augment with full master cryptanalytic and corpus vocabulary
 try:
-    from lexicon import get_master_dictionary
+    from ciphers.lexicon import get_master_dictionary
     CORE_WORDS.update(get_master_dictionary())
 except ImportError:
     try:
-        from ciphers.lexicon import get_master_dictionary
+        from lexicon import get_master_dictionary
         CORE_WORDS.update(get_master_dictionary())
     except ImportError:
         pass
@@ -232,14 +232,20 @@ def rank_candidates(candidates: List[str]) -> List[Tuple[str, float, dict]]:
 
 def score_runic_candidate(rune_text: str) -> float:
     """Evaluate linguistic plausibility directly in GF(29) Futhorc rune space."""
-    from taxonomy import score_composite_runes, clean_runes_to_indices
+    try:
+        from ciphers.taxonomy import score_composite_runes, clean_runes_to_indices
+    except ImportError:
+        from taxonomy import score_composite_runes, clean_runes_to_indices
     indices = clean_runes_to_indices(rune_text)
     return score_composite_runes(indices)
 
 
 def is_plausible_runic(rune_text: str) -> Tuple[bool, dict]:
     """Test candidate decryption using calibrated GF(29) runic model & surrogate test."""
-    from taxonomy import score_composite_runes, surrogate_shuffle_test, clean_runes_to_indices
+    try:
+        from ciphers.taxonomy import score_composite_runes, surrogate_shuffle_test, clean_runes_to_indices
+    except ImportError:
+        from taxonomy import score_composite_runes, surrogate_shuffle_test, clean_runes_to_indices
     indices = clean_runes_to_indices(rune_text)
     score = score_composite_runes(indices)
     mu_null, std_null, z_score, is_sig = surrogate_shuffle_test(indices, score, n_shuffles=40)

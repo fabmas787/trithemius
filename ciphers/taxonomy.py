@@ -24,34 +24,57 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    INDEX_BY_RUNE,
-    LATIN_BY_RUNE,
-    PRIME_BY_RUNE,
-    RUNE_BY_INDEX,
-    RUNE_TABLE,
-    decode_runes,
-    euler_totient,
-    index_to_rune,
-    is_prime,
-    latin_to_rune,
-    rune_to_index,
-)
-from interrupter import (
-    InterrupterConfig,
-    KOAN2_F_SKIP_POSITIONS,
-    WELCOME_F_SKIP_POSITIONS,
-    canonical_key_shifts,
-    rune_vigenere_decode_dynamic,
-    rune_vigenere_decode_f_skip,
-    rune_vigenere_encode_dynamic,
-)
-from kasiski import prime_totient_stream_decode
+try:
+    from ciphers.agrippa import (
+        INDEX_BY_RUNE,
+        LATIN_BY_RUNE,
+        PRIME_BY_RUNE,
+        RUNE_BY_INDEX,
+        RUNE_TABLE,
+        decode_runes,
+        euler_totient,
+        index_to_rune,
+        is_prime,
+        latin_to_rune,
+        rune_to_index,
+    )
+    from ciphers.interrupter import (
+        InterrupterConfig,
+        KOAN2_F_SKIP_POSITIONS,
+        WELCOME_F_SKIP_POSITIONS,
+        canonical_key_shifts,
+        rune_vigenere_decode_dynamic,
+        rune_vigenere_decode_f_skip,
+        rune_vigenere_encode_dynamic,
+    )
+    from ciphers.kasiski import prime_totient_stream_decode
+except ImportError:
+    from agrippa import (
+        INDEX_BY_RUNE,
+        LATIN_BY_RUNE,
+        PRIME_BY_RUNE,
+        RUNE_BY_INDEX,
+        RUNE_TABLE,
+        decode_runes,
+        euler_totient,
+        index_to_rune,
+        is_prime,
+        latin_to_rune,
+        rune_to_index,
+    )
+    from interrupter import (
+        InterrupterConfig,
+        KOAN2_F_SKIP_POSITIONS,
+        WELCOME_F_SKIP_POSITIONS,
+        canonical_key_shifts,
+        rune_vigenere_decode_dynamic,
+        rune_vigenere_decode_f_skip,
+        rune_vigenere_encode_dynamic,
+    )
+    from kasiski import prime_totient_stream_decode
 
 try:
     from agents.ledger import (
@@ -71,7 +94,7 @@ except ImportError:
     get_tested_words = None
 
 try:
-    from lexicon import (
+    from ciphers.lexicon import (
         SACRED_CANONICAL_WORDS,
         get_master_dictionary,
         generate_all_key_variants,
@@ -82,7 +105,7 @@ try:
     )
 except ImportError:
     try:
-        from ciphers.lexicon import (
+        from lexicon import (
             SACRED_CANONICAL_WORDS,
             get_master_dictionary,
             generate_all_key_variants,
@@ -101,7 +124,7 @@ except ImportError:
         generate_cyclic_rotations = None
 
 try:
-    from metal_accel import (
+    from ciphers.metal_accel import (
         is_metal_available,
         get_metal_device_info,
         metal_score_keys_batch,
@@ -111,7 +134,7 @@ try:
     )
 except ImportError:
     try:
-        from ciphers.metal_accel import (
+        from metal_accel import (
             is_metal_available,
             get_metal_device_info,
             metal_score_keys_batch,
@@ -128,14 +151,14 @@ except ImportError:
         metal_surrogate_shuffles = None
 
 try:
-    from ane_engine import (
+    from ciphers.ane_engine import (
         is_ane_available,
         get_ane_device_info,
         score_candidate_naturalness_neural,
     )
 except ImportError:
     try:
-        from ciphers.ane_engine import (
+        from ane_engine import (
             is_ane_available,
             get_ane_device_info,
             score_candidate_naturalness_neural,
@@ -285,10 +308,10 @@ def score_composite_runes(indices: List[int]) -> float:
 
 
 try:
-    from sprt import sprt as _sprt, bigram_llr_table as _bigram_llr_table
+    from ciphers.sprt import sprt as _sprt, bigram_llr_table as _bigram_llr_table
 except ImportError:
     try:
-        from ciphers.sprt import sprt as _sprt, bigram_llr_table as _bigram_llr_table
+        from sprt import sprt as _sprt, bigram_llr_table as _bigram_llr_table
     except ImportError:
         _sprt = None
         _bigram_llr_table = None

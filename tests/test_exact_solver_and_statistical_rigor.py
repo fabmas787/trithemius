@@ -15,12 +15,12 @@ import random
 import unittest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-import taxonomy
-from agrippa import latin_to_rune
-from kasiski import rune_vigenere_encode, rune_vigenere_decode
+import ciphers.taxonomy as taxonomy
+from ciphers.agrippa import latin_to_rune
+from ciphers.kasiski import rune_vigenere_encode, rune_vigenere_decode
 import agents.ledger as ledger
 
 
@@ -185,7 +185,7 @@ class TestStatisticalRigor(unittest.TestCase):
 
     def test_solve_interrupter_bigram_exact(self):
         """Verify exact MAP recovery under dynamic key interrupter schedule."""
-        from interrupter import InterrupterConfig, rune_vigenere_encode_dynamic
+        from ciphers.interrupter import InterrupterConfig, rune_vigenere_encode_dynamic
         sample_pt = "SOME WISDOM THE PRIMES ARE SACRED THE TOTIENT FUNCTION IS SACRED ALL THINGS SHOULD BE PARED"
         runes = latin_to_rune(sample_pt)
         key = "DIVINITY"

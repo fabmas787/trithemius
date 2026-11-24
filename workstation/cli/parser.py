@@ -128,6 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     # status subcommand
     p_status = subparsers.add_parser("status", help="Display system telemetry and corpus health")
     p_status.add_argument("--probe", "-p", action="store_true", help="Probe configured providers and models")
+    p_status.add_argument("--json", action="store_true", help="Format CLI output as machine-readable JSON")
 
     # running-key subcommand
     p_rk = subparsers.add_parser("running-key", help="GF(29) running-key decryption against reference text")

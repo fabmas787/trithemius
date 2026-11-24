@@ -46,33 +46,55 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 # Path setup
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
-CIPHERS_DIR = os.path.join(BASE_DIR, "ciphers")
-for d in (BASE_DIR, CIPHERS_DIR):
-    if d not in sys.path:
-        sys.path.insert(0, d)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    INDEX_BY_RUNE,
-    LATIN_BY_RUNE,
-    PRIME_BY_RUNE,
-    RUNE_BY_INDEX,
-    decode_runes,
-    index_to_rune,
-    latin_to_rune,
-)
-from al_kindi import (
-    chi_squared_score,
-    english_word_ratio,
-    is_plausible_english,
-    is_plausible_runic,
-    ngram_score,
-)
-from interrupter import canonical_key_shifts
-from taxonomy import (
-    score_composite_runes,
-    surrogate_shuffle_test,
-    compute_unigram_ic,
-)
+try:
+    from ciphers.agrippa import (
+        INDEX_BY_RUNE,
+        LATIN_BY_RUNE,
+        PRIME_BY_RUNE,
+        RUNE_BY_INDEX,
+        decode_runes,
+        index_to_rune,
+        latin_to_rune,
+    )
+    from ciphers.al_kindi import (
+        chi_squared_score,
+        english_word_ratio,
+        is_plausible_english,
+        is_plausible_runic,
+        ngram_score,
+    )
+    from ciphers.interrupter import canonical_key_shifts
+    from ciphers.taxonomy import (
+        score_composite_runes,
+        surrogate_shuffle_test,
+        compute_unigram_ic,
+    )
+except ImportError:
+    from agrippa import (
+        INDEX_BY_RUNE,
+        LATIN_BY_RUNE,
+        PRIME_BY_RUNE,
+        RUNE_BY_INDEX,
+        decode_runes,
+        index_to_rune,
+        latin_to_rune,
+    )
+    from al_kindi import (
+        chi_squared_score,
+        english_word_ratio,
+        is_plausible_english,
+        is_plausible_runic,
+        ngram_score,
+    )
+    from interrupter import canonical_key_shifts
+    from taxonomy import (
+        score_composite_runes,
+        surrogate_shuffle_test,
+        compute_unigram_ic,
+    )
 
 try:
     from agents.ledger import log_canonical_attempt, count_attempts

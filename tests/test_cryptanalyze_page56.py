@@ -9,9 +9,8 @@ import sys
 import unittest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
-sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from scripts.cryptanalyze_page56 import (
     load_page_56_transcript,

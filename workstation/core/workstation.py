@@ -15,10 +15,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-for sub in ("ciphers", "scripts", "agents"):
-    sub_p = os.path.join(BASE_DIR, sub)
-    if sub_p not in sys.path:
-        sys.path.insert(0, sub_p)
 
 import config
 from config import get_model, MODELS, SUPPORTED_PROVIDERS

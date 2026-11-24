@@ -20,11 +20,10 @@ import unittest
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
 
-from agrippa import decode_runes, latin_to_rune
-from kasiski import rune_vigenere_decode, rune_vigenere_encode
-import taxonomy
+from ciphers.agrippa import decode_runes, latin_to_rune
+from ciphers.kasiski import rune_vigenere_decode, rune_vigenere_encode
+import ciphers.taxonomy as taxonomy
 import trithemius
 
 

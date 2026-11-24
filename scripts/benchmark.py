@@ -16,16 +16,19 @@ import platform
 from typing import Dict, Any, List, Optional
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
-sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 import config
-import agrippa
-import kasiski
-import entropy
-import ask
-import taxonomy
+try:
+    from ciphers import agrippa, kasiski, entropy, taxonomy
+    from scripts import ask
+except ImportError:
+    import agrippa
+    import kasiski
+    import entropy
+    import ask
+    import taxonomy
 
 BENCH_DIR = os.environ.get("TRITHEMIUS_BENCH_DIR", os.path.join(BASE_DIR, "vectordb"))
 DB_DIR = os.path.join(BASE_DIR, "vectordb")

@@ -10,11 +10,8 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-AGENTS_DIR = os.path.join(BASE_DIR, "agents")
-if AGENTS_DIR not in sys.path:
-    sys.path.insert(0, AGENTS_DIR)
 
-from evidence import (
+from agents.evidence import (
     evidence_status,
     posterior_after_negative,
     init_evidence_schema,

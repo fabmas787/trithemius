@@ -16,8 +16,14 @@ import os
 import argparse
 from typing import Tuple, Dict
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-from agrippa import INDEX_BY_RUNE, decode_runes, gematria_prime_sum
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+try:
+    from ciphers.agrippa import INDEX_BY_RUNE, decode_runes, gematria_prime_sum
+except ImportError:
+    from agrippa import INDEX_BY_RUNE, decode_runes, gematria_prime_sum
 
 PUNCT_REPLACEMENTS = {
     "•": "᛫",

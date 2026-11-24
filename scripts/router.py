@@ -31,18 +31,31 @@ from typing import Dict, Any, Optional, Union, List
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS_DIR = os.path.join(BASE_DIR, "corpus")
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    decode_runes, latin_to_rune, gematria_prime_sum, gematria_word_sums,
-    rune_atbash, euler_totient, is_prime, prime_factors, INDEX_BY_RUNE
-)
-from kasiski import (
-    rune_vigenere_decode, rune_vigenere_encode, vigenere_decode, vigenere_encode,
-    rune_index_of_coincidence, index_of_coincidence
-)
-from al_kindi import is_plausible_english
-from entropy import shannon_entropy, is_high_entropy
+try:
+    from ciphers.agrippa import (
+        decode_runes, latin_to_rune, gematria_prime_sum, gematria_word_sums,
+        rune_atbash, euler_totient, is_prime, prime_factors, INDEX_BY_RUNE
+    )
+    from ciphers.kasiski import (
+        rune_vigenere_decode, rune_vigenere_encode, vigenere_decode, vigenere_encode,
+        rune_index_of_coincidence, index_of_coincidence
+    )
+    from ciphers.al_kindi import is_plausible_english
+    from ciphers.entropy import shannon_entropy, is_high_entropy
+except ImportError:
+    from agrippa import (
+        decode_runes, latin_to_rune, gematria_prime_sum, gematria_word_sums,
+        rune_atbash, euler_totient, is_prime, prime_factors, INDEX_BY_RUNE
+    )
+    from kasiski import (
+        rune_vigenere_decode, rune_vigenere_encode, vigenere_decode, vigenere_encode,
+        rune_index_of_coincidence, index_of_coincidence
+    )
+    from al_kindi import is_plausible_english
+    from entropy import shannon_entropy, is_high_entropy
 
 MAX_OPERAND = 10**12
 MAX_TEXT_LEN = 10_000

@@ -23,7 +23,6 @@ import ollama
 import chromadb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.dirname(__file__))
 import config
 from config import get_model, MODELS, MODEL_NAME, DEFAULT_NUM_CTX, DEFAULT_NUM_PREDICT
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "vectordb")
@@ -222,11 +221,13 @@ def clear_rag_cache(db_path: str = CACHE_DB_PATH) -> bool:
 
 RUNE_REGEX = re.compile(r"[\u16A0-\u16FF]")
 try:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-    from agrippa import decode_runes, latin_to_rune
+    from ciphers.agrippa import decode_runes, latin_to_rune
 except Exception:
-    decode_runes = None
-    latin_to_rune = None
+    try:
+        from agrippa import decode_runes, latin_to_rune
+    except Exception:
+        decode_runes = None
+        latin_to_rune = None
 
 
 PAGE_TITLES_MAP = {
@@ -334,9 +335,9 @@ def load_persisted_bm25(corpus_dir: str = CORPUS_DIR, index_path: str = BM25_IND
         return None
     try:
         try:
-            from bodleian import compute_corpus_digest
-        except ImportError:
             from scripts.bodleian import compute_corpus_digest
+        except ImportError:
+            from bodleian import compute_corpus_digest
         current_digest = compute_corpus_digest(corpus_dir)
         idx_mtime = os.path.getmtime(index_path)
 
@@ -404,9 +405,9 @@ def bm25_retrieve(query: str, corpus_dir: str = CORPUS_DIR, k: int = TOP_K, inde
     else:
         # Gather documents and build index
         try:
-            from bodleian import iter_corpus_documents
-        except ImportError:
             from scripts.bodleian import iter_corpus_documents
+        except ImportError:
+            from bodleian import iter_corpus_documents
         docs = iter_corpus_documents(corpus_dir)
         if not docs:
             return []
@@ -487,9 +488,9 @@ def bm25_retrieve(query: str, corpus_dir: str = CORPUS_DIR, k: int = TOP_K, inde
         # Atomically save index
         try:
             try:
-                from bodleian import compute_corpus_digest
-            except ImportError:
                 from scripts.bodleian import compute_corpus_digest
+            except ImportError:
+                from bodleian import compute_corpus_digest
             digest = compute_corpus_digest(corpus_dir)
             index_data = {
                 "format_version": BM25_FORMAT_VERSION,

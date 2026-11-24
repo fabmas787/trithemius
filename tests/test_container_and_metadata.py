@@ -18,9 +18,8 @@ import zlib
 import unittest
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, "ciphers"))
-sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 import ciphers.container as container
 import ciphers.opsec as opsec

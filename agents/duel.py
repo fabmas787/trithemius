@@ -22,9 +22,11 @@ import sys
 import ollama
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
 from config import MODEL_NAME, get_model
-from al_kindi import is_plausible_english
+try:
+    from ciphers.al_kindi import is_plausible_english
+except ImportError:
+    from al_kindi import is_plausible_english
 
 CHAT_MODEL = MODEL_NAME
 

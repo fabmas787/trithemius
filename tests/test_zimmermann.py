@@ -12,11 +12,8 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-CIPHERS_DIR = os.path.join(BASE_DIR, "ciphers")
-if CIPHERS_DIR not in sys.path:
-    sys.path.insert(0, CIPHERS_DIR)
 
-from zimmermann import (
+from ciphers.zimmermann import (
     crc24,
     dearmor,
     parse_keys,
@@ -106,7 +103,7 @@ class TestZimmermannNativePGP(unittest.TestCase):
             "sig": 1,
         }
         with self.assertRaises(ValueError) as ctx:
-            from zimmermann import _verify
+            from ciphers.zimmermann import _verify
             _verify(fake_sig, b"data", "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\n-----END PGP PUBLIC KEY BLOCK-----", None)
         self.assertIn("only RSA signatures are supported", str(ctx.exception))
 

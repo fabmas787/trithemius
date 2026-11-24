@@ -23,19 +23,27 @@ BASE_DIR = os.path.dirname(CURRENT_DIR)
 CORPUS_DIR = os.path.join(BASE_DIR, "corpus")
 REFERENCE_DIR = os.path.join(CORPUS_DIR, "reference_texts")
 
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    INDEX_BY_RUNE,
-    PRIME_BY_RUNE,
-    latin_to_rune,
-    decode_runes,
-    index_to_rune,
-    rune_atbash,
-)
+try:
+    from ciphers.agrippa import (
+        INDEX_BY_RUNE,
+        PRIME_BY_RUNE,
+        latin_to_rune,
+        decode_runes,
+        index_to_rune,
+        rune_atbash,
+    )
+except ImportError:
+    from agrippa import (
+        INDEX_BY_RUNE,
+        PRIME_BY_RUNE,
+        latin_to_rune,
+        decode_runes,
+        index_to_rune,
+        rune_atbash,
+    )
 
 M = 29  # Field size GF(29)
 

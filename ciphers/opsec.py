@@ -26,10 +26,10 @@ LEGACY_FINGERPRINTS = {
 }
 
 try:
-    from zimmermann import verify_cleartext, verify_detached, parse_keys
+    from ciphers.zimmermann import verify_cleartext, verify_detached, parse_keys
 except ImportError:
     try:
-        from ciphers.zimmermann import verify_cleartext, verify_detached, parse_keys
+        from zimmermann import verify_cleartext, verify_detached, parse_keys
     except ImportError:
         verify_cleartext = None
         verify_detached = None
@@ -108,10 +108,10 @@ def verify_cicada_message(text: str, pubkey_block: Optional[str] = None) -> Dict
 
 
 try:
-    from container import inspect_container_file
+    from ciphers.container import inspect_container_file
 except ImportError:
     try:
-        from ciphers.container import inspect_container_file
+        from container import inspect_container_file
     except ImportError:
         inspect_container_file = None
 

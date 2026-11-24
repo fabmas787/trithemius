@@ -18,10 +18,6 @@ from unittest.mock import patch
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-for sub in ("ciphers", "scripts"):
-    subpath = os.path.join(BASE_DIR, sub)
-    if subpath not in sys.path:
-        sys.path.insert(0, subpath)
 
 from ciphers.agrippa import (
     INDEX_BY_RUNE,

@@ -9,9 +9,9 @@ Usage:
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ciphers"))
-sys.path.insert(0, os.path.dirname(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 try:
     from crewai import Agent, Task, Crew, Process, LLM
@@ -25,17 +25,30 @@ except ImportError:
             return fn
         return decorator
 
-from agrippa import (
-    decode_runes, latin_to_rune, rune_to_prime, gematria_prime_sum,
-    gematria_word_sums, rune_atbash, euler_totient, is_prime, prime_factors
-)
-from kasiski import (
-    estimate_key_length, crack_vigenere, vigenere_decode, consensus_key_length,
-    rune_vigenere_decode, rune_vigenere_encode, rune_index_of_coincidence,
-    estimate_rune_key_length, generate_primes, generate_fibonacci
-)
-from al_kindi import ngram_score, rank_candidates, is_plausible_english, chi_squared_score
-from ledger import log_attempt, has_been_tried, summary as ledger_summary
+try:
+    from ciphers.agrippa import (
+        decode_runes, latin_to_rune, rune_to_prime, gematria_prime_sum,
+        gematria_word_sums, rune_atbash, euler_totient, is_prime, prime_factors
+    )
+    from ciphers.kasiski import (
+        estimate_key_length, crack_vigenere, vigenere_decode, consensus_key_length,
+        rune_vigenere_decode, rune_vigenere_encode, rune_index_of_coincidence,
+        estimate_rune_key_length, generate_primes, generate_fibonacci
+    )
+    from ciphers.al_kindi import ngram_score, rank_candidates, is_plausible_english, chi_squared_score
+    from agents.ledger import log_attempt, has_been_tried, summary as ledger_summary
+except ImportError:
+    from agrippa import (
+        decode_runes, latin_to_rune, rune_to_prime, gematria_prime_sum,
+        gematria_word_sums, rune_atbash, euler_totient, is_prime, prime_factors
+    )
+    from kasiski import (
+        estimate_key_length, crack_vigenere, vigenere_decode, consensus_key_length,
+        rune_vigenere_decode, rune_vigenere_encode, rune_index_of_coincidence,
+        estimate_rune_key_length, generate_primes, generate_fibonacci
+    )
+    from al_kindi import ngram_score, rank_candidates, is_plausible_english, chi_squared_score
+    from ledger import log_attempt, has_been_tried, summary as ledger_summary
 from config import CREWAI_MODEL_NAME, ACTIVE_PROVIDER, OLLAMA_HOST, get_api_key
 
 local_llm = None

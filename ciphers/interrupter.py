@@ -26,13 +26,20 @@ import os
 import sys
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
+BASE_DIR = os.path.dirname(CURRENT_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from agrippa import (
-    RUNE_TABLE, INDEX_BY_RUNE, RUNE_BY_INDEX, PRIME_BY_RUNE, LATIN_BY_RUNE,
-    index_to_rune, rune_to_index, latin_to_rune, decode_runes
-)
+try:
+    from ciphers.agrippa import (
+        RUNE_TABLE, INDEX_BY_RUNE, RUNE_BY_INDEX, PRIME_BY_RUNE, LATIN_BY_RUNE,
+        index_to_rune, rune_to_index, latin_to_rune, decode_runes
+    )
+except ImportError:
+    from agrippa import (
+        RUNE_TABLE, INDEX_BY_RUNE, RUNE_BY_INDEX, PRIME_BY_RUNE, LATIN_BY_RUNE,
+        index_to_rune, rune_to_index, latin_to_rune, decode_runes
+    )
 
 
 class InterruptMode(Enum):

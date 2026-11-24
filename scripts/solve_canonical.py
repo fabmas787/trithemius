@@ -28,16 +28,23 @@ import os
 import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for d in (BASE_DIR, os.path.join(BASE_DIR, "ciphers")):
-    if d not in sys.path:
-        sys.path.insert(0, d)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-from solved_pages import (
-    SOLVED_PAGES_REGISTRY,
-    resolve_solved_page,
-    solve_page,
-    verify_all_solved_pages,
-)
+try:
+    from ciphers.solved_pages import (
+        SOLVED_PAGES_REGISTRY,
+        resolve_solved_page,
+        solve_page,
+        verify_all_solved_pages,
+    )
+except ImportError:
+    from solved_pages import (
+        SOLVED_PAGES_REGISTRY,
+        resolve_solved_page,
+        solve_page,
+        verify_all_solved_pages,
+    )
 
 
 def main():
