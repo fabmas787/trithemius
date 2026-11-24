@@ -11,7 +11,8 @@ Provides:
 Usage:
     from al_kindi import (
         ngram_score, chi_squared_score, english_word_ratio,
-        rank_candidates, is_plausible_english
+        rank_candidates, is_plausible_english,
+        reduced_chi_squared, kl_divergence_english, chi_squared_p_value
     )
 """
 
@@ -67,16 +68,26 @@ CORE_WORDS = {
     "CIRCUMFERENCE", "KNOWLEDGE", "SEEK", "FIND", "WELCOME", "MASTER", "PATH", "END"
 }
 
-# Augment with full master cryptanalytic and corpus vocabulary
+# Augment with full master cryptanalytic and corpus vocabulary (O(1) frozenset)
 try:
-    from ciphers.lexicon import get_master_dictionary
-    CORE_WORDS.update(get_master_dictionary())
+    from ciphers.lexicon import get_master_dictionary_set
+    CORE_WORDS.update(get_master_dictionary_set())
 except ImportError:
     try:
-        from lexicon import get_master_dictionary
-        CORE_WORDS.update(get_master_dictionary())
+        from lexicon import get_master_dictionary_set
+        CORE_WORDS.update(get_master_dictionary_set())
     except ImportError:
-        pass
+        try:
+            from ciphers.lexicon import get_master_dictionary
+            CORE_WORDS.update(get_master_dictionary())
+        except ImportError:
+            try:
+                from lexicon import get_master_dictionary
+                CORE_WORDS.update(get_master_dictionary())
+            except ImportError:
+                pass
+
+CORE_WORDS_FROZEN: frozenset = frozenset(CORE_WORDS)
 
 
 def clean(text: str) -> str:
@@ -148,7 +159,7 @@ def english_word_ratio(text: str, min_word_len: int = 3) -> float:
     tokens = [t for t in tokens if len(t) >= min_word_len]
 
     if tokens:
-        hits = sum(1 for t in tokens if t in CORE_WORDS)
+        hits = sum(1 for t in tokens if t in CORE_WORDS_FROZEN)
         return round(hits / len(tokens), 3)
 
     # Substring search if unspaced
@@ -157,7 +168,7 @@ def english_word_ratio(text: str, min_word_len: int = 3) -> float:
     if n_clean < min_word_len:
         return 0.0
     matched_chars = set()
-    for w in CORE_WORDS:
+    for w in CORE_WORDS_FROZEN:
         len_w = len(w)
         if len_w > n_clean:
             continue
@@ -180,12 +191,59 @@ def length_normalized_chi_squared(text: str) -> float:
     return round(chi_squared_score(text) / n, 4)
 
 
+def reduced_chi_squared(text: str, df: int = 25) -> float:
+    """
+    Compute reduced Chi-Squared statistic (chi2 / df) against standard English.
+    For English 26-letter monogram distribution, df = 25 (26 - 1).
+    """
+    chi2 = chi_squared_score(text)
+    if chi2 == float("inf") or df <= 0:
+        return float("inf")
+    return round(chi2 / df, 4)
+
+
+def kl_divergence_english(text: str, epsilon: float = 1e-6) -> float:
+    """
+    Compute Kullback-Leibler (KL) divergence D_KL(P_obs || P_ref) against standard English.
+    Length-invariant metric. Strictly satisfies Gibbs inequality (clamped to >= 0.0).
+    """
+    cleaned = clean(text)
+    n = len(cleaned)
+    if not n:
+        return float("inf")
+    counts = Counter(cleaned)
+    total_ref = sum(ENGLISH_MONOGRAMS.values())
+    kl = 0.0
+    for letter in ALPHABET:
+        p_obs = counts.get(letter, 0) / n
+        p_ref = ENGLISH_MONOGRAMS.get(letter, 0.0) / total_ref
+        if p_obs > 0.0:
+            kl += p_obs * math.log((p_obs + epsilon) / (p_ref + epsilon))
+    return max(0.0, kl)
+
+
+def chi_squared_p_value(chi2: float, df: int = 25) -> float:
+    """
+    Compute analytical Chi-Squared upper-tail p-value via Wilson-Hilferty transformation.
+    Pure Python implementation using math.erfc with zero external dependencies.
+    """
+    if chi2 < 0.0 or df <= 0 or math.isinf(chi2):
+        return 0.0
+    if chi2 == 0.0:
+        return 1.0
+    z = (((chi2 / df) ** (1.0 / 3.0)) - (1.0 - 2.0 / (9.0 * df))) / math.sqrt(2.0 / (9.0 * df))
+    p = 0.5 * math.erfc(z / math.sqrt(2.0))
+    return max(0.0, min(1.0, p))
+
+
 def is_plausible_english(text: str, legacy_threshold: Optional[bool] = None) -> Tuple[bool, dict]:
     """
     Comprehensive gatekeeper test for decryption candidates.
     Returns (Passed: bool, metrics: dict).
-    Uses length-invariant chi-squared / n statistic by default, while supporting
-    legacy fixed 180.0 threshold via legacy_threshold flag or TRITHEMIUS_LEGACY_CHI2 env var.
+    Uses length-invariant statistics (KL divergence and per-symbol chi2) by default,
+    preventing long texts (L > 800) from being falsely rejected due to linear Chi2 scaling.
+    Assigns composite verdict: PLAUSIBLE, UNCERTAIN, or IMPLAUSIBLE.
+    Supports legacy fixed 180.0 threshold via legacy_threshold flag or TRITHEMIUS_LEGACY_CHI2 env var.
     """
     if legacy_threshold is None:
         legacy_threshold = os.environ.get("TRITHEMIUS_LEGACY_CHI2", "off").lower() in ("1", "true", "on")
@@ -193,28 +251,48 @@ def is_plausible_english(text: str, legacy_threshold: Optional[bool] = None) -> 
     cleaned = clean(text)
     n = len(cleaned)
     chi2 = chi_squared_score(text)
+    chi2_red = reduced_chi_squared(text, df=25)
     chi2_per_symbol = round(chi2 / max(1, n), 4) if n > 0 else float("inf")
+    kl = kl_divergence_english(text)
+    p_val = chi_squared_p_value(chi2, df=25)
     ngram = ngram_score(text)
     word_ratio = english_word_ratio(text)
 
     # In legacy mode: fixed chi2 < 180.0
     # In length-invariant mode: chi2_per_symbol < 0.75 OR (chi2 < 180.0)
-    # Typical English scores ~0.15 - 0.45; random text scores ~2.5 - 4.0+.
+    # Typical English scores: chi2_per_symbol ~0.15 - 0.45, KL ~0.10 - 0.40; random text > 2.0.
     if legacy_threshold:
         chi_passed = (chi2 < 180.0)
     else:
         chi_passed = (chi2 < 180.0 or chi2_per_symbol < 0.75)
 
-    passed = (chi_passed and ngram > 0.05) or (word_ratio >= 0.20)
+    is_plausible = (chi_passed and ngram > 0.05 and kl <= 0.65) or (word_ratio >= 0.20)
+
+    if legacy_threshold:
+        passed = is_plausible
+        verdict = "PLAUSIBLE" if passed else "REJECT"
+    else:
+        if is_plausible:
+            verdict = "PLAUSIBLE"
+            passed = True
+        elif word_ratio >= 0.15 or (chi2_per_symbol < 0.85 and ngram > 0.02):
+            verdict = "UNCERTAIN"
+            passed = False
+        else:
+            verdict = "REJECT"
+            passed = False
 
     metrics = {
         "passed": passed,
         "chi_squared": chi2,
         "chi_squared_per_symbol": chi2_per_symbol,
+        "reduced_chi_squared": chi2_red,
+        "kl_divergence": kl,
+        "p_value": p_val,
         "ngram_score": ngram,
         "word_ratio": word_ratio,
         "legacy_threshold": legacy_threshold,
-        "verdict": "PLAUSIBLE" if passed else "REJECT"
+        "verdict": verdict,
     }
     return passed, metrics
 

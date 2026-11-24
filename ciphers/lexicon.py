@@ -376,6 +376,8 @@ def load_reference_text_vocabulary(reference_dir: str = REFERENCE_DIR, min_len: 
 # Master combined and deduplicated dictionary
 _CACHED_MASTER_DICT: Optional[List[str]] = None
 _CACHED_MASTER_DICTS: Dict[Tuple[bool, bool, int, int], List[str]] = {}
+_CACHED_MASTER_FROZENSET: Optional[frozenset[str]] = None
+_CACHED_MASTER_FROZENSETS: Dict[Tuple[bool, bool, int, int], frozenset[str]] = {}
 
 
 def get_master_dictionary(
@@ -438,6 +440,43 @@ def get_master_dictionary(
         _CACHED_MASTER_DICT = result
 
     return result
+
+
+def get_master_dictionary_set(
+    include_corpus: bool = True,
+    include_references: Any = True,
+    min_len: int = 3,
+    max_len: int = 24
+) -> frozenset[str]:
+    """
+    Returns an immutable frozenset of the deduplicated master keyword dictionary
+    for high-performance O(1) membership lookups.
+    """
+    global _CACHED_MASTER_FROZENSET
+
+    if isinstance(include_references, int) and not isinstance(include_references, bool):
+        max_len = min_len
+        min_len = include_references
+        include_references = True
+    else:
+        include_references = bool(include_references)
+
+    cache_key = (bool(include_corpus), bool(include_references), int(min_len), int(max_len))
+    if cache_key in _CACHED_MASTER_FROZENSETS:
+        return _CACHED_MASTER_FROZENSETS[cache_key]
+
+    word_list = get_master_dictionary(
+        include_corpus=include_corpus,
+        include_references=include_references,
+        min_len=min_len,
+        max_len=max_len,
+    )
+    fset = frozenset(word_list)
+    _CACHED_MASTER_FROZENSETS[cache_key] = fset
+    if include_corpus and include_references and min_len == 3 and max_len == 24:
+        _CACHED_MASTER_FROZENSET = fset
+
+    return fset
 
 
 # =============================================================================
@@ -661,17 +700,21 @@ class FastLexiconIndex:
 
     def __init__(self, words: Optional[List[str]] = None):
         self.words = words or get_master_dictionary()
-        self.rune_words: Set[str] = set()
-        self.rune_prefixes: Set[str] = set()
+        self.rune_words: frozenset[str] = frozenset()
+        self.rune_prefixes: frozenset[str] = frozenset()
         self._build_index()
 
     def _build_index(self):
+        rune_words = set()
+        rune_prefixes = set()
         for w in self.words:
             rw = "".join(c for c in latin_to_rune(w) if c in INDEX_BY_RUNE)
             if rw and len(rw) >= 3:
-                self.rune_words.add(rw)
+                rune_words.add(rw)
                 for k in range(3, len(rw) + 1):
-                    self.rune_prefixes.add(rw[:k])
+                    rune_prefixes.add(rw[:k])
+        self.rune_words = frozenset(rune_words)
+        self.rune_prefixes = frozenset(rune_prefixes)
 
     def is_word(self, rune_str: str) -> bool:
         return rune_str in self.rune_words
