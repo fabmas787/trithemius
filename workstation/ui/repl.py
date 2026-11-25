@@ -275,8 +275,9 @@ def dispatch_repl_command(
             self.print_solve(res)
 
         elif cmd == "/crack":
+            usage = "Usage: /crack <text_or_page> [--deep] [--compound] [--randomize] [--rotations] [--crib-limit N] [--top-k N] [--no-metal] [--no-ane]\n"
             if not args:
-                print("Usage: /crack <text_or_page> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]\n")
+                print(usage)
             else:
                 deep = False
                 compound = False
@@ -284,15 +285,41 @@ def dispatch_repl_command(
                 rotations = False
                 use_metal = True
                 use_ane = True
+                crib_limit = None
+                top_k = 5
                 clean_args = []
-                for a in args:
+                parse_error = None
+                i = 0
+                while i < len(args):
+                    a = args[i]
+                    i += 1
                     if a.startswith("-"):
-                        norm_flag = a.lstrip("-").lower()
-                        if norm_flag in ("deep", "d"):
+                        norm_flag, _, inline_val = a.lstrip("-").lower().partition("=")
+                        if norm_flag in ("crib-limit", "criblimit", "top-k", "topk"):
+                            if inline_val:
+                                raw_val = inline_val
+                            elif i < len(args):
+                                raw_val = args[i]
+                                i += 1
+                            else:
+                                parse_error = f"--{norm_flag} requires a positive integer value"
+                                break
+                            try:
+                                ivalue = int(raw_val)
+                            except ValueError:
+                                ivalue = 0
+                            if ivalue <= 0:
+                                parse_error = f"--{norm_flag} expects a positive integer (> 0), got {raw_val!r}"
+                                break
+                            if norm_flag in ("crib-limit", "criblimit"):
+                                crib_limit = ivalue
+                            else:
+                                top_k = ivalue
+                        elif norm_flag in ("deep", "d"):
                             deep = True
                         elif norm_flag in ("compound", "comp", "c"):
                             compound = True
-                        elif norm_flag in ("random", "rand", "rnd", "r"):
+                        elif norm_flag in ("randomize", "random", "rand", "rnd", "r"):
                             randomize = True
                         elif norm_flag in ("rotations", "rotation", "rot", "rots"):
                             rotations = True
@@ -307,8 +334,10 @@ def dispatch_repl_command(
                     else:
                         clean_args.append(a)
 
-                if not clean_args:
-                    print("Usage: /crack <text_or_page> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]\n")
+                if parse_error:
+                    print(f"[!] {parse_error}\n{usage}")
+                elif not clean_args:
+                    print(usage)
                 else:
                     target = " ".join(clean_args)
                     res = self.run_crack(
@@ -317,6 +346,8 @@ def dispatch_repl_command(
                         compound=compound,
                         randomize=randomize,
                         include_rotations=rotations,
+                        crib_limit=crib_limit,
+                        top_k=top_k,
                         use_metal=use_metal,
                         use_ane=use_ane,
                         progress_callback=progress_callback,

@@ -90,6 +90,26 @@ class TestCommandSpecParity(unittest.TestCase):
                     self.parser.parse_args(bad_argv)
             self.assertNotEqual(ctx.exception.code, 0)
 
+    def test_repl_crack_parses_valued_flags_like_cli(self):
+        from workstation.ui.repl import dispatch_repl_command
+
+        with patch.object(self.ws, "run_crack", return_value={}) as run_crack, \
+                patch.object(self.ws, "print_crack"):
+            dispatch_repl_command(self.ws, "/crack 56 --crib-limit 200 --top-k=3 --randomize --rotations")
+        run_crack.assert_called_once()
+        call = run_crack.call_args
+        self.assertEqual(call.args[0], "56")
+        self.assertEqual(call.kwargs["crib_limit"], 200)
+        self.assertEqual(call.kwargs["top_k"], 3)
+        self.assertTrue(call.kwargs["randomize"])
+        self.assertTrue(call.kwargs["include_rotations"])
+
+        for bad in ("/crack 56 --top-k 0", "/crack 56 --crib-limit abc", "/crack 56 --top-k"):
+            with self.subTest(bad=bad), patch.object(self.ws, "run_crack") as run_crack, \
+                    patch("builtins.print"):
+                dispatch_repl_command(self.ws, bad)
+            run_crack.assert_not_called()
+
     def test_agents_crew_imports_cleanly_without_crewai(self):
         code = (
             "import sys; sys.modules['crewai'] = None; sys.modules['crewai.tools'] = None; "
