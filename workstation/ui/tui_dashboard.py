@@ -440,7 +440,9 @@ class TrithemiusApp(App):
                         cancel_event=self.cancel_event,
                     )
                 stream.flush()
-                if cmd_name == "/crack":
+                if res is None:
+                    self.call_from_thread(self.action_show_console)
+                elif cmd_name == "/crack":
                     self.call_from_thread(self._display_crack_summary, res)
                 else:
                     self.call_from_thread(self._display_running_key_summary, res)
