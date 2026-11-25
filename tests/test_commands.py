@@ -105,7 +105,7 @@ class TestCommandSpecParity(unittest.TestCase):
         self.assertTrue(call.kwargs["include_rotations"])
 
         for bad in ("/crack 56 --top-k 0", "/crack 56 --crib-limit abc", "/crack 56 --top-k",
-                    "/crack 56 --crib-limit= 200"):
+                    "/crack 56 --crib-limit= 200", "/crack 56 --randomize=false"):
             with self.subTest(bad=bad), patch.object(self.ws, "run_crack") as run_crack, \
                     patch("builtins.print"):
                 dispatch_repl_command(self.ws, bad)

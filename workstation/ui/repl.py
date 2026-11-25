@@ -315,6 +315,9 @@ def dispatch_repl_command(
                                 crib_limit = ivalue
                             else:
                                 top_k = ivalue
+                        elif has_inline:
+                            parse_error = f"--{norm_flag} does not take a value"
+                            break
                         elif norm_flag in ("deep", "d"):
                             deep = True
                         elif norm_flag in ("compound", "comp", "c"):
