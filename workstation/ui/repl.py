@@ -294,9 +294,9 @@ def dispatch_repl_command(
                     a = args[i]
                     i += 1
                     if a.startswith("-"):
-                        norm_flag, _, inline_val = a.lstrip("-").lower().partition("=")
+                        norm_flag, has_inline, inline_val = a.lstrip("-").lower().partition("=")
                         if norm_flag in ("crib-limit", "criblimit", "top-k", "topk"):
-                            if inline_val:
+                            if has_inline:
                                 raw_val = inline_val
                             elif i < len(args):
                                 raw_val = args[i]
