@@ -8,14 +8,15 @@
   - `AssistantService` (`workstation/services/assistant_service.py`): Interactive RAG query pipeline, streaming LLM integration, exact answer cache, and web scouting context.
   - `SystemService` (`workstation/services/system_service.py`): Telemetry inspection, active hardware detection (Apple Silicon Metal / ANE), and provider probes.
 - **Presentation & Dual Rendering**:
+  - `TrithemiusApp` (`workstation/ui/tui_dashboard.py`): Event-driven 3-pane Textual TUI dashboard (`--tui`, auto-enabled on interactive TTYs).
   - `ConsoleRenderer` (`workstation/ui/formatters.py`): High-density ANSI terminal layout.
   - `JsonRenderer` (`workstation/ui/json_renderer.py`): Machine-readable JSON output for automated pipelines (`--json`).
   - `TypedResult` hierarchy (`workstation/core/results.py`): Strongly typed domain outputs with dictionary/attribute dual access.
 - **Command Routing & REPL**:
-  - `CommandSpec` declarative registry (`workstation/commands.py`): 35 registered commands with CLI router and REPL shell.
+  - `CommandSpec` declarative registry (`workstation/commands.py`): 37 registered commands with CLI router and REPL/TUI shell.
   - Interactive REPL (`workstation/ui/repl.py`): Tab-completion, history, and tokenized arguments.
 - **Historical Web GUI**: The experimental browser interface (`gui/`) has been formally archived; this repository checkout represents the dedicated high-performance Terminal Workstation.
-- **Regression Test Baseline**: 367 passing unit and integration tests across 39 test suites, including byte-for-byte golden master validation.
+- **Regression Test Baseline**: 454 unit and integration tests across 44 test modules, including byte-for-byte golden master validation.
 
 ## Milestone Status
 | Milestone | Scope | Status | Notes |
@@ -29,9 +30,10 @@
 ## Code Layout
 - `trithemius.py`: CLI entrypoint and backward-compatible facade.
 - `workstation/`: Core workstation kernel, domain services, UI renderers, and CLI/REPL routers.
-- `ciphers/`: GF(29) taxonomy, Gematria Primus, Vigenère mod-29, ANE/Metal acceleration, OpSec verification.
+- `ciphers/`: 28-module $\text{GF}(29)$ taxonomy, Gematria Primus, Vigenère mod-29, extended solvers (`solvers_ext.py`), ANE/Metal/C99 native acceleration, and OpSec verification.
 - `scripts/`: Corpus librarians (porta.py, bodleian.py), partitioning (split_master_transcript.py), RAG retriever (ask.py), solvers & cryptanalysis (solve_canonical.py, totient_stream.py, cryptanalyze_page56.py), rune normalizer (normalize_runes.py), benchmarking (benchmark.py).
 - `agents/`: Multi-agent orchestration (crew.py, duel.py), Bayesian epistemic evidence ledger (evidence.py, ledger.py), and regression runner (regress.py).
 - `corpus/`: Page transcripts, indexes, and reference literature (`corpus/reference_texts/`).
+- `wordlists/`: Deduplicated uppercase English wordlists totaling 1,248,755 words (`00_sacred_lexicon.txt`, `01_english_dictionary.txt`, `02_english_ngrams_extra.txt`).
 - `vectordb/`: Persistent ChromaDB embeddings and canonical hypothesis ledgers.
-- `tests/`: 367 unit tests across 39 test suites, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).
+- `tests/`: 454 unit and integration tests across 44 test modules, AST architecture checks (`test_architecture.py`), and golden master suites (`tests/golden/`).

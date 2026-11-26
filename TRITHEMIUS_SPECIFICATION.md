@@ -408,7 +408,8 @@ Launching `python3 trithemius.py` or `./start.sh` opens the interactive workstat
 | `/totient-stream` | `/totient-stream <enc\|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]` | Liber Primus Prime Totient Stream Cipher ($\phi(p_i) = p_i - 1 \bmod 29$) with Fehu skip |
 | `/totient` | `/totient <enc\|dec> <text_filepath_or_page> [--offset N] [--f-skip] [--skip-indices ...]` | Liber Primus Prime Totient Stream Cipher alias and single-value totient evaluation |
 | `/solve` | `/solve [page_id\|all]` | Solve and verify canonical Liber Primus solved pages from official wiki |
-| `/crack` | `/crack <target> [--deep] [--compound] [--random] [--rotations] [--no-metal] [--no-ane]` | Automated Liber Primus $\text{GF}(29)$ Cryptanalytic Cascade Solver with Apple Silicon acceleration |
+| `/crack` | `/crack <target> [--deep] [--compound] [--randomize] [--rotations] [--f-skip] [--extended-dict] [--crib-limit N] [--top-k N] [--seed N] [--no-metal] [--no-ane]` | Automated Liber Primus $\text{GF}(29)$ Cryptanalytic Cascade Solver with Apple Silicon acceleration |
+| `/key-sweep` | `/key-sweep <page_or_file> [--wordlist FILE] [--mode sub\|add\|beaufort] [--period N] [--f-skip] [--rotations] [--variants] [--top-k N] [--force] [--no-metal]` | Batch-test large wordlists or the 1.25M-word extended dictionary with Metal GPU & compressed `TestedKeySet` dedup |
 | `/hardware` | `/hardware (aliases: /gpu, /metal, /ane)` | Query and benchmark Apple Silicon Metal GPU and Apple Neural Engine acceleration |
 | `/ledger` | `/ledger [page_id_or_word]` | Inspect recorded cryptanalytic attempts in the ChromaDB vector database & SQLite ledger |
 | `/triage` | `/triage <text_filepath_or_page>` | Statistical triage & cipher family classification (IC, kappa, entropy) |
@@ -431,6 +432,7 @@ Launching `python3 trithemius.py` or `./start.sh` opens the interactive workstat
 | `/bench` | `/bench [--profile] [--skip-vector] [--llm] [--compare BASELINE] [--save-baseline NAME]` | Run microsecond latency benchmark suite & hotspot profiling |
 | `/clear` | `/clear` | Clear terminal screen buffer |
 | `/help` | `/help [command]` | Display command manual or detailed help for a specific command |
+| `/explain` | `/explain (alias: /trace)` | Inspect mathematical calculation steps and formulas from the last solver operation |
 | `/exit` | `/exit  OR  /quit` | Safely exit and disconnect from Trithemius Workstation |
 
 ### 9.2 Direct CLI Subcommands
@@ -458,7 +460,7 @@ python3 trithemius.py --low-spec --ollama-host http://remote-gpu:11434 ask "What
 
 ## 10. Automated Test & Regression Baseline
 
-The test suite contains 367 automated unit and regression tests executing across 39 test modules:
+The test suite contains 454 automated unit and integration tests executing across 44 test modules (including `test_crack_optimizations_and_rigor.py`, `test_differential_accel.py`, and `test_lexicon_wordlists.py` in addition to the core suites below):
 - **Canonical Solvers & Solved Pages**:
   - `tests/test_canonical_solved_pages.py` (35 tests): Validates exact solutions for all 9 historically solved Liber Primus pages against wiki reference plaintext.
   - `tests/test_solved_pages.py` (33 tests): Validates deterministic end-to-end execution of canonical Liber Primus solvers.
