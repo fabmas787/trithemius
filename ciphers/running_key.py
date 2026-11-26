@@ -74,21 +74,16 @@ M = 29  # Field size GF(29)
 class DecodedString(str):
     """
     Decoded string result that behaves as human-readable Latin plaintext by default,
-    while also exposing the authentic Futhorc runes and matching comparisons to both.
+    while also exposing the authentic Futhorc runes via ``.runes``.
+
+    Equality and hashing use the decoded Latin ``str``; rune comparisons must
+    use ``.runes`` explicitly.
     """
     def __new__(cls, latin: str, runes: str):
         obj = str.__new__(cls, latin)
         obj.latin = latin
         obj.runes = runes
         return obj
-
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, str):
-            return str(self) == other or self.runes == other
-        return super().__eq__(other)
-
-    def __hash__(self) -> int:
-        return hash(str(self))
 
     def __repr__(self) -> str:
         return f"DecodedString({super().__repr__()}, runes={self.runes!r})"

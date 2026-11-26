@@ -1,4 +1,4 @@
-"""
+r"""
 Entropy — Information Theory and Signal Profiling module for Cicada 3301.
 
 Provides:
@@ -49,7 +49,7 @@ def _clean_runic_data(data: str) -> List[str]:
 
 
 def detect_alphabet_size(data: str) -> int:
-    """
+    r"""
     Detect the alphabet cardinality |\Sigma| of the given data:
     - 29 for canonical Futhorc runes (Z29)
     - 16 for hexadecimal strings
@@ -111,7 +111,7 @@ def shannon_entropy(data: str, alphabet_size: Optional[int] = None) -> float:
 
 
 def miller_madow_entropy(data: str, alphabet_size: Optional[int] = None) -> float:
-    """
+    r"""
     Compute Miller-Madow bias-corrected entropy in bits per character:
         H_MM = min(log2(|\Sigma|), H_1 + (m - 1) / (2 * L * ln 2))
     where:
@@ -157,7 +157,7 @@ def miller_madow_entropy(data: str, alphabet_size: Optional[int] = None) -> floa
 
 
 def normalized_entropy(data: str, alphabet_size: Optional[int] = None) -> float:
-    """
+    r"""
     Compute normalized entropy H_norm = H(X) / log2(|\Sigma|) in range [0.0, 1.0].
     """
     if not data:
@@ -292,7 +292,7 @@ def index_of_coincidence(text: str) -> float:
 
 
 def extract_signal_features(text: str) -> Dict[str, Any]:
-    """
+    r"""
     Extract statistical feature vector F and alphabet profiles:
     - entropy: Shannon Entropy (legacy key)
     - ioc: Index of Coincidence

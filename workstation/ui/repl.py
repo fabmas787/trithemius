@@ -12,6 +12,49 @@ from config import get_model, MODELS, SUPPORTED_PROVIDERS
 from workstation.core.workstation import CORPUS_DIR
 from workstation.services.assistant_service import _get_ask
 
+_WIN_VT_ENABLED = False
+
+
+def _enable_windows_vt() -> bool:
+    """Enable ANSI virtual terminal processing on Windows stdout if available."""
+    global _WIN_VT_ENABLED
+    if os.name != "nt":
+        return True
+    if _WIN_VT_ENABLED:
+        return True
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        if handle in (0, -1):
+            return False
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        enable_vt = 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        if not (mode.value & enable_vt):
+            if not kernel32.SetConsoleMode(handle, mode.value | enable_vt):
+                return False
+        _WIN_VT_ENABLED = True
+        return True
+    except Exception:
+        return False
+
+
+def _clear_screen(stream=None) -> bool:
+    """Clear the terminal viewport via ANSI escapes only when writing to a TTY."""
+    target = sys.stdout if stream is None else stream
+    isatty = getattr(target, "isatty", None)
+    if not callable(isatty) or not isatty():
+        return False
+    if os.name == "nt" and not _enable_windows_vt():
+        return False
+    target.write("\033[2J\033[H")
+    flush = getattr(target, "flush", None)
+    if callable(flush):
+        flush()
+    return True
+
 def run_repl(self, ui_mode: Optional[bool] = None):
         # Determine whether to launch Textual TUI
         launch_tui = False
@@ -79,7 +122,7 @@ def run_repl(self, ui_mode: Optional[bool] = None):
                 break
 
             if raw.lower() in ("/clear", "clear"):
-                os.system("clear" if os.name != "nt" else "cls")
+                _clear_screen()
                 continue
 
             dispatch_repl_command(self, raw)
@@ -122,7 +165,7 @@ def dispatch_repl_command(
             self.run_boost(arg)
 
         elif cmd in ("/clear",):
-            os.system("clear" if os.name != "nt" else "cls")
+            _clear_screen()
 
         elif cmd == "/bench":
             profile = "--profile" in args

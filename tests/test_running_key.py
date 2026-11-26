@@ -327,15 +327,24 @@ class TestPhilosophicalCorpusAndLexicon(unittest.TestCase):
         self.assertTrue(index.is_prefix(holy_rune[:6]))
 
     def test_decoded_string_hash_and_membership(self):
-        """Verify DecodedString is hashable and works in sets and dicts."""
+        """Verify DecodedString uses symmetric Latin str equality/hashing and preserves .runes."""
         from ciphers.running_key import DecodedString
         s = DecodedString("WELCOME", "ᚹᛖᛚᚳᚩᛗᛖ")
+        self.assertEqual(s.runes, "ᚹᛖᛚᚳᚩᛗᛖ")
+        self.assertEqual(s, "WELCOME")
+        self.assertEqual("WELCOME", s)
+        self.assertNotEqual(s, s.runes)
+        self.assertNotEqual(s.runes, s)
+        self.assertFalse(s == s.runes)
+        self.assertFalse(s.runes == s)
         self.assertEqual(hash(s), hash("WELCOME"))
+        self.assertEqual(len({s, "WELCOME"}), 1)
         s_set = {s}
         self.assertIn("WELCOME", s_set)
         self.assertIn(s, s_set)
         s_dict = {s: 1}
         self.assertEqual(s_dict["WELCOME"], 1)
+        self.assertEqual({"WELCOME": 42}[s], 42)
 
     def test_text_to_rune_indices_mixed_input(self):
         """Verify text containing both Latin and runes preserves all runes and Latin words."""

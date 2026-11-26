@@ -483,9 +483,11 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
 
         with patch("builtins.input", input_mock), patch("sys.stdout", stdout_trap), patch("os.system") as mock_sys:
             self.ws.repl()
-            mock_sys.assert_called_once()
+            mock_sys.assert_not_called()
 
         out = stdout_trap.getvalue()
+        # Non-TTY StringIO must receive zero ANSI escape sequences
+        self.assertNotIn("\033[", out)
         # Verify print_command_list is suppressed by default to prevent prompt clutter
         cmd_ref_count = out.count("COMMANDS REFERENCE:")
         self.assertEqual(cmd_ref_count, 0)
@@ -493,6 +495,15 @@ class TestTerminalWorkstationUIAndBoost(unittest.TestCase):
         self.assertIn("[HELP: /vigenere]", out)
         self.assertIn("Modulo-29 (Futhorc) or Modulo-26", out)
         self.assertIn("[*] Workstation session terminated.", out)
+
+        # Verify a TTY stream receives the ANSI clear sequence without calling os.system
+        tty_stream = io.StringIO()
+        tty_stream.isatty = lambda: True
+        tty_inputs = ["clear", "/exit"]
+        with patch("builtins.input", MagicMock(side_effect=tty_inputs)), patch("sys.stdout", tty_stream), patch("os.system") as mock_sys_tty:
+            self.ws.repl()
+            mock_sys_tty.assert_not_called()
+        self.assertIn("\033[2J\033[H", tty_stream.getvalue())
 
     def test_run_key_section_display(self):
         stdout_trap = io.StringIO()
