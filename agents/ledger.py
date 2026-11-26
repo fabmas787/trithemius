@@ -21,57 +21,38 @@ import re
 import json
 import math
 import hashlib
+import threading
 from datetime import datetime, timezone
-from typing import Union, Optional, List, Dict, Any, Set
+from typing import Union, Optional, List, Dict, Any, Set, Tuple
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "vectordb", "ledger.sqlite3")
 VECTOR_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "vectordb"))
 ATTEMPTS_COLLECTION_NAME = "cryptanalytic_attempts"
 
+_INIT_LOCK = threading.Lock()
+_INITIALIZED_DB_KEYS: Set[Tuple[str, int, int, int]] = set()
+_MAX_INIT_CACHE_SIZE = 256
 
-def backup_ledger(db_path: str = DB_PATH) -> Optional[str]:
-    """Create a timestamped backup of ledger.sqlite3 using SQLite backup API."""
-    if not os.path.exists(db_path):
-        return None
+
+def _reset_schema_cache() -> None:
+    """Clear the cached set of initialized database file keys."""
+    with _INIT_LOCK:
+        _INITIALIZED_DB_KEYS.clear()
+
+
+def _db_cache_key(abs_path: str) -> Optional[Tuple[str, int, int, int]]:
+    """Return a stat-based cache key for abs_path, or None if missing/empty/unidentifiable."""
     try:
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        backup_path = f"{db_path}.{ts}.bak"
-        src_conn = sqlite3.connect(db_path)
-        dst_conn = sqlite3.connect(backup_path)
-        with dst_conn:
-            src_conn.backup(dst_conn)
-        dst_conn.close()
-        src_conn.close()
-        return backup_path
-    except Exception:
+        st = os.stat(abs_path)
+    except FileNotFoundError:
         return None
+    if st.st_ino == 0 or st.st_size == 0:
+        return None
+    return (abs_path, st.st_dev, st.st_ino, getattr(st, "st_birthtime_ns", st.st_ctime_ns))
 
 
-def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    db_exists = os.path.exists(db_path)
-
-    # Check if migration is needed before schema changes
-    if db_exists:
-        try:
-            chk = sqlite3.connect(db_path)
-            cur = chk.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='canonical_attempts'")
-            has_canonical = cur.fetchone() is not None
-            chk.close()
-            if not has_canonical:
-                backup_ledger(db_path)
-        except Exception:
-            pass
-
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-    except Exception:
-        pass
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-
+def _init_schema(conn: sqlite3.Connection) -> None:
+    """Create ledger tables and indexes if absent and ensure schema migrations."""
     # Legacy attempts table preserved for full backward compatibility
     conn.execute("""
         CREATE TABLE IF NOT EXISTS attempts (
@@ -123,7 +104,93 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_canonical_page_word ON canonical_attempts (page, word)")
     except Exception:
         pass
-    return conn
+    conn.commit()
+
+
+def backup_ledger(db_path: str = DB_PATH) -> Optional[str]:
+    """Create a timestamped backup of ledger.sqlite3 using SQLite backup API."""
+    if not os.path.exists(db_path):
+        return None
+    src_conn = None
+    dst_conn = None
+    try:
+        parent_dir = os.path.dirname(db_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        backup_path = f"{db_path}.{ts}.bak"
+        src_conn = sqlite3.connect(db_path, timeout=30.0)
+        dst_conn = sqlite3.connect(backup_path, timeout=30.0)
+        with dst_conn:
+            src_conn.backup(dst_conn)
+        return backup_path
+    except Exception:
+        return None
+    finally:
+        if dst_conn is not None:
+            dst_conn.close()
+        if src_conn is not None:
+            src_conn.close()
+
+
+def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
+    if db_path == ":memory:" or db_path.startswith("file:"):
+        conn = sqlite3.connect(db_path, uri=db_path.startswith("file:"), timeout=30.0)
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            _init_schema(conn)
+            return conn
+        except Exception:
+            conn.close()
+            raise
+
+    abs_path = os.path.abspath(db_path)
+    parent_dir = os.path.dirname(abs_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+
+    key = _db_cache_key(abs_path)
+    with _INIT_LOCK:
+        is_initialized = key is not None and key in _INITIALIZED_DB_KEYS
+
+    conn = sqlite3.connect(abs_path, timeout=30.0)
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        if is_initialized:
+            return conn
+
+        with _INIT_LOCK:
+            key = _db_cache_key(abs_path)
+            if key is not None and key in _INITIALIZED_DB_KEYS:
+                return conn
+
+            if key is not None:
+                try:
+                    cur = conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='canonical_attempts'"
+                    )
+                    if cur.fetchone() is None:
+                        backup_ledger(abs_path)
+                except Exception:
+                    pass
+
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except Exception:
+                pass
+            _init_schema(conn)
+
+            new_key = _db_cache_key(abs_path)
+            if new_key is not None:
+                if len(_INITIALIZED_DB_KEYS) >= _MAX_INIT_CACHE_SIZE:
+                    _INITIALIZED_DB_KEYS.clear()
+                _INITIALIZED_DB_KEYS.add(new_key)
+        return conn
+    except Exception:
+        conn.close()
+        raise
 
 
 def canonical_json(data: Any) -> str:
@@ -189,13 +256,15 @@ def has_attempt_been_tried(page: Union[int, str], method: str, parameters: dict,
     """O(1) lookup against canonical_key index. Returns previous attempt details or None."""
     ckey = canonical_key(page, method, parameters, input_digest, method_version=method_version)
     conn = _connect(db_path)
-    cur = conn.execute(
-        "SELECT score, passed_gatekeeper, result_preview, scorer_version, created_at "
-        "FROM canonical_attempts WHERE canonical_key = ?",
-        (ckey,)
-    )
-    row = cur.fetchone()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "SELECT score, passed_gatekeeper, result_preview, scorer_version, created_at "
+            "FROM canonical_attempts WHERE canonical_key = ?",
+            (ckey,)
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
     if row:
         return {
             "canonical_key": ckey,
@@ -208,12 +277,19 @@ def has_attempt_been_tried(page: Union[int, str], method: str, parameters: dict,
     return None
 
 
-def log_canonical_attempt(page: Union[int, str], method: str, parameters: dict,
-                          input_digest: str, score: float, passed: bool,
-                          result_preview: str = "", method_version: int = 1,
-                          scorer_version: int = 1, word: Optional[str] = None,
-                          db_path: str = DB_PATH) -> bool:
-    """Insert or ignore canonical attempt. Returns True if newly logged, False if duplicate."""
+def _build_canonical_attempt_row(
+    page: Union[int, str],
+    method: str,
+    parameters: dict,
+    input_digest: str,
+    score: float,
+    passed: bool,
+    result_preview: str = "",
+    method_version: int = 1,
+    scorer_version: int = 1,
+    word: Optional[str] = None,
+) -> Tuple[str, str, int, str, str, str, float, int, int, str, str]:
+    """Normalize and pack a canonical_attempts row tuple for single or batch insertion."""
     ckey = canonical_key(page, method, parameters, input_digest, method_version=method_version)
     c_page = canonical_page(page)
     c_method = method.strip().lower()
@@ -224,25 +300,44 @@ def log_canonical_attempt(page: Union[int, str], method: str, parameters: dict,
         target_word = target_word.strip().upper()
     else:
         target_word = ""
+    return (
+        c_page, c_method, int(method_version), p_json, input_digest,
+        ckey, float(score), int(scorer_version), 1 if passed else 0, preview, target_word
+    )
 
+
+def log_canonical_attempt(page: Union[int, str], method: str, parameters: dict,
+                          input_digest: str, score: float, passed: bool,
+                          result_preview: str = "", method_version: int = 1,
+                          scorer_version: int = 1, word: Optional[str] = None,
+                          db_path: str = DB_PATH) -> bool:
+    """Insert or ignore canonical attempt. Returns True if newly logged, False if duplicate."""
+    row = _build_canonical_attempt_row(
+        page=page,
+        method=method,
+        parameters=parameters,
+        input_digest=input_digest,
+        score=score,
+        passed=passed,
+        result_preview=result_preview,
+        method_version=method_version,
+        scorer_version=scorer_version,
+        word=word,
+    )
     conn = _connect(db_path)
     try:
-        cur = conn.execute("""
-            INSERT OR IGNORE INTO canonical_attempts (
-                page, method, method_version, parameters_json, input_digest,
-                canonical_key, score, scorer_version, passed_gatekeeper, result_preview, word
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            c_page, c_method, int(method_version), p_json, input_digest,
-            ckey, float(score), int(scorer_version), 1 if passed else 0, preview, target_word
-        ))
-        conn.commit()
-        inserted = cur.rowcount > 0
-        conn.close()
-        return inserted
+        with conn:
+            cur = conn.execute("""
+                INSERT OR IGNORE INTO canonical_attempts (
+                    page, method, method_version, parameters_json, input_digest,
+                    canonical_key, score, scorer_version, passed_gatekeeper, result_preview, word
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, row)
+            return cur.rowcount > 0
     except Exception:
-        conn.close()
         return False
+    finally:
+        conn.close()
 
 
 def count_attempts(family: Optional[str] = None, page: Optional[Union[str, int]] = None, db_path: str = DB_PATH) -> int:
@@ -250,8 +345,9 @@ def count_attempts(family: Optional[str] = None, page: Optional[Union[str, int]]
     Count total attempts recorded in the ledger, optionally filtered by method family and/or page.
     Used for look-elsewhere multiple-testing corrections across hypothesis families.
     """
-    if not os.path.exists(db_path):
+    if db_path != ":memory:" and not db_path.startswith("file:") and not os.path.exists(db_path):
         return 0
+    conn = None
     try:
         conn = _connect(db_path)
         where_clauses = []
@@ -271,10 +367,12 @@ def count_attempts(family: Optional[str] = None, page: Optional[Union[str, int]]
         cur_leg = conn.execute(f"SELECT COUNT(*) FROM attempts {where_sql}", params)
         count_legacy = cur_leg.fetchone()[0]
 
-        conn.close()
         return count_canonical + count_legacy
     except Exception:
         return 0
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # -----------------------------------------------------------------------------
@@ -284,69 +382,75 @@ def count_attempts(family: Optional[str] = None, page: Optional[Union[str, int]]
 def log_attempt(page: str, method: str, key: str = None, result: str = None,
                 success: bool = False, notes: str = None, db_path: str = DB_PATH):
     conn = _connect(db_path)
-    conn.execute(
-        "INSERT INTO attempts (page, method, key, result, success, notes, timestamp) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (page, method, key, result, int(success), notes, datetime.now(timezone.utc).isoformat()),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO attempts (page, method, key, result, success, notes, timestamp) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (page, method, key, result, int(success), notes, datetime.now(timezone.utc).isoformat()),
+            )
+    finally:
+        conn.close()
 
 
 def has_been_tried(page: str, method: str, key: str = None, db_path: str = DB_PATH) -> bool:
     conn = _connect(db_path)
-    c_page = canonical_page(page)
-    c_method = method.strip().lower()
-    prefix = f"{c_method}:"
-    prefix_len = len(prefix)
-    if key is not None:
-        cur = conn.execute(
-            "SELECT 1 FROM attempts WHERE page=? AND method=? AND key=? LIMIT 1",
-            (page, method, key),
-        )
-        found = cur.fetchone() is not None
-        if not found:
-            c_word = str(key).strip().upper()
+    try:
+        c_page = canonical_page(page)
+        c_method = method.strip().lower()
+        prefix = f"{c_method}:"
+        prefix_len = len(prefix)
+        if key is not None:
             cur = conn.execute(
-                "SELECT 1 FROM canonical_attempts "
-                "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) AND word=? LIMIT 1",
-                (c_page, c_method, prefix_len, prefix, c_word),
+                "SELECT 1 FROM attempts WHERE page=? AND method=? AND key=? LIMIT 1",
+                (page, method, key),
             )
             found = cur.fetchone() is not None
-    else:
-        cur = conn.execute(
-            "SELECT 1 FROM attempts WHERE page=? AND method=? LIMIT 1",
-            (page, method),
-        )
-        found = cur.fetchone() is not None
-        if not found:
+            if not found:
+                c_word = str(key).strip().upper()
+                cur = conn.execute(
+                    "SELECT 1 FROM canonical_attempts "
+                    "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) AND word=? LIMIT 1",
+                    (c_page, c_method, prefix_len, prefix, c_word),
+                )
+                found = cur.fetchone() is not None
+        else:
             cur = conn.execute(
-                "SELECT 1 FROM canonical_attempts "
-                "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) LIMIT 1",
-                (c_page, c_method, prefix_len, prefix),
+                "SELECT 1 FROM attempts WHERE page=? AND method=? LIMIT 1",
+                (page, method),
             )
             found = cur.fetchone() is not None
-    conn.close()
-    return found
+            if not found:
+                cur = conn.execute(
+                    "SELECT 1 FROM canonical_attempts "
+                    "WHERE page=? AND (method=? OR substr(method, 1, ?)=?) LIMIT 1",
+                    (c_page, c_method, prefix_len, prefix),
+                )
+                found = cur.fetchone() is not None
+        return found
+    finally:
+        conn.close()
 
 
 def get_history(page: str = None, method: str = None, successful_only: bool = False, db_path: str = DB_PATH) -> list:
     conn = _connect(db_path)
-    query = "SELECT page, method, key, result, success, notes, timestamp FROM attempts WHERE 1=1"
-    params = []
-    if page:
-        query += " AND page=?"
-        params.append(page)
-    if method:
-        query += " AND method=?"
-        params.append(method)
-    if successful_only:
-        query += " AND success=1"
-    query += " ORDER BY timestamp DESC"
+    try:
+        query = "SELECT page, method, key, result, success, notes, timestamp FROM attempts WHERE 1=1"
+        params = []
+        if page:
+            query += " AND page=?"
+            params.append(page)
+        if method:
+            query += " AND method=?"
+            params.append(method)
+        if successful_only:
+            query += " AND success=1"
+        query += " ORDER BY timestamp DESC"
 
-    cur = conn.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
 
     cols = ["page", "method", "key", "result", "success", "notes", "timestamp"]
     return [dict(zip(cols, row)) for row in rows]
@@ -355,11 +459,13 @@ def get_history(page: str = None, method: str = None, successful_only: bool = Fa
 def summary(db_path: str = DB_PATH) -> str:
     """Quick human-readable summary of everything tried so far."""
     conn = _connect(db_path)
-    cur = conn.execute(
-        "SELECT page, COUNT(*), SUM(success) FROM attempts GROUP BY page"
-    )
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "SELECT page, COUNT(*), SUM(success) FROM attempts GROUP BY page"
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
     if not rows:
         return "No attempts logged yet."
     lines = [f"{page}: {count} attempts, {succ or 0} successful" for page, count, succ in rows]
@@ -575,21 +681,37 @@ def record_attempts_batch(
 
     # 2. Batch insert into SQLite
     db_sqlite = os.path.join(db_dir, "ledger.sqlite3") if db_dir != VECTOR_DIR else DB_PATH
+    rows = [
+        _build_canonical_attempt_row(
+            page=a["page"],
+            method=a["method"],
+            parameters=a["parameters"],
+            input_digest=f"word_{a['word']}",
+            score=a["score"],
+            passed=a["passed"],
+            result_preview=a["result_preview"],
+            word=a["word"],
+        )
+        for a in valid_attempts
+    ]
+    conn = None
     try:
-        for a in valid_attempts:
-            log_canonical_attempt(
-                page=a["page"],
-                method=a["method"],
-                parameters=a["parameters"],
-                input_digest=f"word_{a['word']}",
-                score=a["score"],
-                passed=a["passed"],
-                result_preview=a["result_preview"],
-                word=a["word"],
-                db_path=db_sqlite,
+        conn = _connect(db_sqlite)
+        with conn:
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO canonical_attempts (
+                    page, method, method_version, parameters_json, input_digest,
+                    canonical_key, score, scorer_version, passed_gatekeeper, result_preview, word
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
             )
     except Exception:
         pass
+    finally:
+        if conn is not None:
+            conn.close()
 
     return len(valid_attempts)
 
@@ -636,8 +758,9 @@ def get_tested_words(
     # 2. Query SQLite canonical_attempts and legacy attempts for full coverage
     db_sqlite = os.path.join(db_dir, "ledger.sqlite3") if db_dir != VECTOR_DIR else DB_PATH
     if os.path.exists(db_sqlite):
+        conn = None
         try:
-            conn = sqlite3.connect(db_sqlite)
+            conn = _connect(db_sqlite)
             query = "SELECT word, parameters_json FROM canonical_attempts"
             params = []
             clauses = []
@@ -680,9 +803,11 @@ def get_tested_words(
                     clean_k = k.split()[0].strip().upper()
                     if clean_k:
                         tested.add(clean_k)
-            conn.close()
         except Exception:
             pass
+        finally:
+            if conn is not None:
+                conn.close()
 
     return tested
 
