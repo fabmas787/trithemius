@@ -30,7 +30,8 @@ if BASE_DIR not in sys.path:
 try:
     from ciphers.agrippa import (
         INDEX_BY_RUNE, RUNE_BY_INDEX, index_to_rune, rune_to_index,
-        latin_to_rune, decode_runes, euler_totient, is_prime
+        latin_to_rune, decode_runes, euler_totient, is_prime,
+        generate_primes as _agrippa_generate_primes,
     )
     from ciphers.interrupter import (
         InterrupterConfig, InterruptMode,
@@ -44,7 +45,8 @@ try:
 except ImportError:
     from agrippa import (
         INDEX_BY_RUNE, RUNE_BY_INDEX, index_to_rune, rune_to_index,
-        latin_to_rune, decode_runes, euler_totient, is_prime
+        latin_to_rune, decode_runes, euler_totient, is_prime,
+        generate_primes as _agrippa_generate_primes,
     )
     from interrupter import (
         InterrupterConfig, InterruptMode,
@@ -215,7 +217,7 @@ def rune_vigenere_decode(
     skip_indices: Optional[Set[int]] = None,
     **interrupter_kwargs
 ) -> str:
-    """
+    r"""
     Decodes runes with a Vigenere key modulo 29.
     $P_i = (C_i - K_i) \pmod{29}$
     Preserves word dividers ('᛫', '᛬', whitespace) if preserve_separators is True.
@@ -263,7 +265,7 @@ def rune_vigenere_encode(
     f_skip: bool = False,
     **interrupter_kwargs
 ) -> str:
-    """
+    r"""
     Encodes runes with a Vigenere key modulo 29.
     $C_i = (P_i + K_i) \pmod{29}$
     Supports dynamic key interrupters via interrupter_config, f_skip, or keyword arguments.
@@ -338,13 +340,7 @@ def estimate_rune_key_length(rune_text: str, max_len: int = 30) -> List[Tuple[in
 
 def generate_primes(n: int) -> List[int]:
     """Generate first n prime numbers (2, 3, 5, 7, ...)."""
-    primes = []
-    candidate = 2
-    while len(primes) < n:
-        if is_prime(candidate):
-            primes.append(candidate)
-        candidate += 1
-    return primes
+    return _agrippa_generate_primes(n)
 
 
 def generate_fibonacci(n: int) -> List[int]:

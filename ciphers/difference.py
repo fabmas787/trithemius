@@ -19,6 +19,8 @@ import math
 import hashlib
 from typing import List, Sequence, Tuple, Dict, Any, Optional
 
+from ciphers.agrippa import prime_factors as _agrippa_prime_factors
+
 N = 29
 
 
@@ -62,16 +64,7 @@ def prime_factors_mult(n: int) -> List[int]:
     """Return prime factors of n with multiplicity."""
     if n <= 1:
         return []
-    factors = []
-    d = 2
-    while d * d <= n:
-        while n % d == 0:
-            factors.append(d)
-            n //= d
-        d += 1
-    if n > 1:
-        factors.append(n)
-    return factors
+    return _agrippa_prime_factors(n)
 
 
 def mobius(n: int) -> int:

@@ -21,7 +21,12 @@ from scripts.cryptanalyze_page56 import (
     execute_hypothesis_3_clause_word_vigenere,
     evaluate_candidate,
 )
-from ciphers.agrippa import INDEX_BY_RUNE, PRIME_BY_RUNE
+from ciphers.agrippa import (
+    INDEX_BY_RUNE,
+    PRIME_BY_RUNE,
+    generate_primes as agrippa_generate_primes,
+)
+from ciphers.kasiski import generate_primes as kasiski_generate_primes
 
 
 class TestCryptanalyzePage56(unittest.TestCase):
@@ -52,6 +57,34 @@ class TestCryptanalyzePage56(unittest.TestCase):
         self.assertEqual(totients[0], 1)
         self.assertEqual(totients[9], 28)
         self.assertEqual(totients[10], 1)  # 31 - 1 = 30 = 1 mod 29
+
+    def test_generate_primes_edge_cases_and_parity(self):
+        """Verify agrippa.generate_primes edge cases, exact p_1000/p_10000, and cross-module parity."""
+        expected_prefix = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+        for n in (-1, 0, 1, 2, 5, 6, 7, 10, 100):
+            ap = agrippa_generate_primes(n)
+            kp = kasiski_generate_primes(n)
+            sp = sieve_primes(n)
+            self.assertEqual(ap, kp)
+            self.assertEqual(ap, sp)
+            if n <= 0:
+                self.assertEqual(ap, [])
+            else:
+                self.assertEqual(len(ap), n)
+                if n <= 10:
+                    self.assertEqual(ap, expected_prefix[:n])
+
+        p1000 = agrippa_generate_primes(1000)
+        self.assertEqual(len(p1000), 1000)
+        self.assertEqual(p1000[-1], 7919)
+        self.assertEqual(kasiski_generate_primes(1000)[-1], 7919)
+        self.assertEqual(sieve_primes(1000)[-1], 7919)
+
+        p10000 = agrippa_generate_primes(10000)
+        self.assertEqual(len(p10000), 10000)
+        self.assertEqual(p10000[-1], 104729)
+        self.assertEqual(kasiski_generate_primes(10000)[-1], 104729)
+        self.assertEqual(sieve_primes(10000)[-1], 104729)
 
     def test_pisano_recurrence_period_14(self):
         """Verify that Fibonacci mod 29 has Pisano period 14."""

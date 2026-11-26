@@ -10,10 +10,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+from ciphers.agrippa import prime_factors as agrippa_prime_factors
 from ciphers.difference import (
     to_differences,
     from_differences,
     is_keystream_delta_valid,
+    prime_factors_mult,
     mobius,
     liouville,
     carmichael_lambda,
@@ -77,6 +79,36 @@ class TestDifference(unittest.TestCase):
 
         self.assertEqual(fp1, fp2)
         self.assertNotEqual(fp1, fp3)
+
+    def test_prime_factors_contracts_immutability_and_parity(self):
+        # Negative, 0, and 1 contracts
+        self.assertEqual(agrippa_prime_factors(0), [])
+        self.assertEqual(agrippa_prime_factors(1), [])
+        self.assertEqual(agrippa_prime_factors(-1), [])
+        self.assertEqual(agrippa_prime_factors(-12), [2, 2, 3])
+        self.assertEqual(prime_factors_mult(0), [])
+        self.assertEqual(prime_factors_mult(1), [])
+        self.assertEqual(prime_factors_mult(-12), [])
+
+        # Cache immutability and cache_info/cache_clear exposure
+        agrippa_prime_factors.cache_clear()
+        f = agrippa_prime_factors(12)
+        self.assertEqual(f, [2, 2, 3])
+        f.append(999)
+        self.assertEqual(agrippa_prime_factors(12), [2, 2, 3])
+        self.assertGreaterEqual(agrippa_prime_factors.cache_info().hits, 1)
+
+        # Parity across wheel-factorization values and large prime
+        for val, expected in [
+            (2, [2]),
+            (3, [3]),
+            (25, [5, 5]),
+            (49, [7, 7]),
+            (360, [2, 2, 2, 3, 3, 5]),
+            (1234567891, [1234567891]),
+        ]:
+            self.assertEqual(agrippa_prime_factors(val), expected)
+            self.assertEqual(prime_factors_mult(val), expected)
 
 
 if __name__ == "__main__":

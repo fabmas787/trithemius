@@ -56,6 +56,7 @@ try:
         PRIME_BY_RUNE,
         RUNE_BY_INDEX,
         decode_runes,
+        generate_primes as _agrippa_generate_primes,
         index_to_rune,
         latin_to_rune,
     )
@@ -79,6 +80,7 @@ except ImportError:
         PRIME_BY_RUNE,
         RUNE_BY_INDEX,
         decode_runes,
+        generate_primes as _agrippa_generate_primes,
         index_to_rune,
         latin_to_rune,
     )
@@ -194,24 +196,8 @@ def load_page_56_transcript(corpus_path: Optional[str] = None) -> Dict[str, Any]
 # =============================================================================
 
 def sieve_primes(n_primes: int) -> List[int]:
-    """Generate the first n_primes primes using an optimized trial/sieve approach."""
-    if n_primes < 1:
-        return []
-    primes = [2]
-    cand = 3
-    while len(primes) < n_primes:
-        is_p = True
-        limit = int(math.isqrt(cand))
-        for p in primes:
-            if p > limit:
-                break
-            if cand % p == 0:
-                is_p = False
-                break
-        if is_p:
-            primes.append(cand)
-        cand += 2
-    return primes
+    """Generate the first n_primes primes via agrippa.generate_primes."""
+    return _agrippa_generate_primes(n_primes)
 
 
 def reconstruct_formatted_latin(

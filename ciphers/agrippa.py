@@ -239,6 +239,37 @@ def direct_translation(text: str, preserve_punctuation: bool = True) -> str:
 
 # --- Sacred Arithmetic / Number Theory Tools for Cicada ---
 
+def _sieve_up_to(limit: int) -> List[int]:
+    """Return all primes <= limit using an odd-only bytearray Sieve of Eratosthenes."""
+    if limit < 2:
+        return []
+    if limit == 2:
+        return [2]
+    size = (limit - 1) // 2
+    is_prime_odd = bytearray([1]) * size
+    sqrt_limit = math.isqrt(limit)
+    for i in range((sqrt_limit - 1) // 2):
+        if is_prime_odd[i]:
+            p = 2 * i + 3
+            start = (p * p - 3) // 2
+            is_prime_odd[start::p] = bytearray(((size - start - 1) // p) + 1)
+    return [2] + [2 * i + 3 for i, flag in enumerate(is_prime_odd) if flag]
+
+
+def generate_primes(n: int) -> List[int]:
+    """Generate the first n prime numbers using an odd-only Sieve of Eratosthenes."""
+    if n <= 0:
+        return []
+    if n <= 5:
+        return [2, 3, 5, 7, 11][:n]
+    limit = int(math.ceil(n * (math.log(n) + math.log(math.log(n))))) + 3
+    primes = _sieve_up_to(limit)
+    while len(primes) < n:
+        limit = int(limit * 1.2) + 16
+        primes = _sieve_up_to(limit)
+    return primes[:n]
+
+
 @functools.lru_cache(maxsize=32768)
 def is_prime(n: int) -> bool:
     """Check if n is prime."""
@@ -255,23 +286,41 @@ def is_prime(n: int) -> bool:
     return True
 
 
-@functools.lru_cache(maxsize=8192)
-def prime_factors(n: int) -> List[int]:
-    """Return prime factorization of n using accelerated odd-step trial division."""
-    factors = []
+@functools.lru_cache(maxsize=4096)
+def _prime_factors_tuple(n: int) -> Tuple[int, ...]:
+    """Return prime factorization of |n| as an immutable tuple using 6k +/- 1 wheel division."""
     temp = abs(n)
+    if temp <= 1:
+        return ()
+    factors: List[int] = []
     while temp % 2 == 0:
         factors.append(2)
         temp //= 2
-    d = 3
+    while temp % 3 == 0:
+        factors.append(3)
+        temp //= 3
+    d = 5
     while d * d <= temp:
         while temp % d == 0:
             factors.append(d)
             temp //= d
-        d += 2
+        d_plus_2 = d + 2
+        while temp % d_plus_2 == 0:
+            factors.append(d_plus_2)
+            temp //= d_plus_2
+        d += 6
     if temp > 1:
         factors.append(temp)
-    return factors
+    return tuple(factors)
+
+
+def prime_factors(n: int) -> List[int]:
+    """Return prime factorization of n using 6k +/- 1 wheel trial division."""
+    return list(_prime_factors_tuple(n))
+
+
+prime_factors.cache_info = _prime_factors_tuple.cache_info
+prime_factors.cache_clear = _prime_factors_tuple.cache_clear
 
 
 @functools.lru_cache(maxsize=8192)
