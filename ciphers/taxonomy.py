@@ -637,12 +637,10 @@ def lag_coincidence_spectrum(indices: List[int], max_lag: int = 32) -> Dict[int,
     Computes the shared lag-coincidence spectrum kappa(d) = sum [c_i == c_{i+d}].
     Evaluated once and consumed across Kasiski repeats, difference periodogram, and column-IoC.
     """
-    n = len(indices)
-    spectrum = {}
-    limit = min(max_lag, n - 1)
-    for d in range(1, limit + 1):
-        spectrum[d] = sum(1 for i in range(n - d) if indices[i] == indices[i + d])
-    return spectrum
+    from ciphers.lagcoinc import coincidence_by_lag
+
+    counts = coincidence_by_lag(indices, max_lag=max_lag)
+    return {d: counts[d - 1] for d in range(1, len(counts) + 1)}
 
 
 def difference_periodogram(

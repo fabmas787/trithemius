@@ -9,7 +9,7 @@ Supports optional NumPy acceleration with pure-Python fallback.
 from __future__ import annotations
 from collections import Counter
 import math
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 try:
     import numpy as np
@@ -18,37 +18,51 @@ except ImportError:
     np = None
     HAS_NUMPY = False
 
+_DIRECT_MAX_LAG = 128
 
-def coincidence_by_lag_numpy(c: Sequence[int], n: int = 29) -> List[int]:
-    """Compute coincidences across all lags using 29 indicator channels with NumPy FFT."""
+
+def coincidence_by_lag_numpy(
+    c: Sequence[int], n: int = 29, max_lag: Optional[int] = None
+) -> List[int]:
+    """Compute coincidences across lags 1..limit using adaptive direct NumPy or batched 2D FFT."""
     arr = np.asarray(c, dtype=int)
     L = len(arr)
-    if L < 2:
+    limit = (L - 1) if max_lag is None else min(int(max_lag), L - 1)
+    if limit <= 0:
         return []
-    # Optimal FFT size: next power of 2 >= 2 * L
-    size = 1 << (2 * L).bit_length()
-    acc = np.zeros(size, dtype=float)
 
-    for s in range(n):
-        channel = (arr == s).astype(float)
-        f = np.fft.rfft(channel, size)
-        acc += np.fft.irfft(f * np.conj(f), size)
+    if limit <= _DIRECT_MAX_LAG or L <= 256:
+        return [int(np.count_nonzero(arr[:-d] == arr[d:])) for d in range(1, limit + 1)]
 
-    # acc[0] is lag 0 (length L); index 1..L-1 correspond to lags 1..L-1
-    res = np.rint(acc[1:L]).astype(int).tolist()
-    return res
+    # Minimal power-of-2 size >= 2 * L - 1 to avoid circular aliasing
+    size = 1 << (2 * L - 2).bit_length()
+    uniq = np.unique(arr)
+    batch_size = max(1, 2_000_000 // size)
+    acc_freq = np.zeros(size // 2 + 1, dtype=np.float64)
+
+    for start in range(0, len(uniq), batch_size):
+        chunk = uniq[start : start + batch_size]
+        indicators = (arr[None, :] == chunk[:, None]).astype(np.float64)
+        f = np.fft.rfft(indicators, n=size, axis=1)
+        acc_freq += np.sum(f.real * f.real + f.imag * f.imag, axis=0)
+
+    acc = np.fft.irfft(acc_freq, n=size)
+    return np.rint(acc[1 : limit + 1]).astype(int).tolist()
 
 
-def coincidence_by_lag_pure(c: Sequence[int], n: int = 29) -> List[int]:
+def coincidence_by_lag_pure(
+    c: Sequence[int], n: int = 29, max_lag: Optional[int] = None
+) -> List[int]:
     """
-    Pure Python direct computation of coincidences at all lags.
-    O(L^2) fallback for environments without NumPy.
+    Pure Python direct computation of coincidences at lags 1..limit.
+    O(L * limit) fallback for environments without NumPy.
     """
     L = len(c)
-    if L < 2:
+    limit = (L - 1) if max_lag is None else min(int(max_lag), L - 1)
+    if limit <= 0:
         return []
-    res = [0] * (L - 1)
-    for d in range(1, L):
+    res = [0] * limit
+    for d in range(1, limit + 1):
         count = 0
         for i in range(L - d):
             if c[i] == c[i + d]:
@@ -57,14 +71,16 @@ def coincidence_by_lag_pure(c: Sequence[int], n: int = 29) -> List[int]:
     return res
 
 
-def coincidence_by_lag(c: Sequence[int], n: int = 29) -> List[int]:
+def coincidence_by_lag(
+    c: Sequence[int], n: int = 29, max_lag: Optional[int] = None
+) -> List[int]:
     """
-    Compute coincidence counts kappa(d) across all lags d in [1, len(c)-1].
-    Uses NumPy FFT if available, else pure-Python fallback.
+    Compute coincidence counts kappa(d) across lags d in [1, limit].
+    Uses adaptive NumPy (direct or batched FFT) if available, else pure-Python fallback.
     """
     if HAS_NUMPY:
-        return coincidence_by_lag_numpy(c, n=n)
-    return coincidence_by_lag_pure(c, n=n)
+        return coincidence_by_lag_numpy(c, n=n, max_lag=max_lag)
+    return coincidence_by_lag_pure(c, n=n, max_lag=max_lag)
 
 
 def _columnar_stats(indices: Sequence[int], period: int) -> Tuple[List[float], int]:

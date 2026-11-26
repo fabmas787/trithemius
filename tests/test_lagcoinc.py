@@ -20,6 +20,7 @@ from ciphers.lagcoinc import (
     mean_columnar_ioc,
     passes_sinkov_columnar_ioc_gate,
 )
+from ciphers.taxonomy import lag_coincidence_spectrum
 
 
 class TestLagCoincidence(unittest.TestCase):
@@ -102,6 +103,52 @@ class TestLagCoincidence(unittest.TestCase):
         self.assertTrue(passed_p1)
         self.assertEqual(thr_p1, 0.0)
         self.assertAlmostEqual(mean_p1, mean_columnar_ioc(seq, period=1), places=5)
+
+    def test_differential_numpy_vs_pure_across_lengths_and_max_lag(self):
+        rng = random.Random(1337)
+        lengths = [0, 1, 2, 3, 4, 5, 16, 256, 257, 512, 1000]
+        for L in lengths:
+            seq = [rng.randrange(29) for _ in range(L)]
+            for max_lag in (None, 30, 0, -1):
+                pure_res = coincidence_by_lag_pure(seq, max_lag=max_lag)
+                general_res = coincidence_by_lag(seq, max_lag=max_lag)
+                self.assertEqual(general_res, pure_res, f"L={L}, max_lag={max_lag}")
+                if HAS_NUMPY:
+                    numpy_res = coincidence_by_lag_numpy(seq, max_lag=max_lag)
+                    self.assertEqual(numpy_res, pure_res, f"L={L}, max_lag={max_lag}")
+
+    def test_differential_non_z29_sequences(self):
+        rng = random.Random(2025)
+        cases = {
+            "negatives_and_large": [rng.randint(-500, 500) for _ in range(320)],
+            "values_gt_28": [rng.randint(29, 200) for _ in range(300)],
+            "all_equal": [777] * 300,
+            "all_distinct": list(range(-150, 150)),
+        }
+        for name, seq in cases.items():
+            for max_lag in (None, 30, 150):
+                pure_res = coincidence_by_lag_pure(seq, max_lag=max_lag)
+                self.assertEqual(coincidence_by_lag(seq, max_lag=max_lag), pure_res, name)
+                if HAS_NUMPY:
+                    self.assertEqual(
+                        coincidence_by_lag_numpy(seq, max_lag=max_lag), pure_res, name
+                    )
+
+    def test_taxonomy_lag_coincidence_spectrum_parity(self):
+        rng = random.Random(99)
+        seqs = [
+            [],
+            [4],
+            [rng.randrange(29) for _ in range(15)],
+            [rng.randrange(29) for _ in range(300)],
+            [rng.randint(-50, 120) for _ in range(350)],
+        ]
+        for seq in seqs:
+            for max_lag in (32, 10, 0):
+                pure_res = coincidence_by_lag_pure(seq, max_lag=max_lag)
+                expected = {d: pure_res[d - 1] for d in range(1, len(pure_res) + 1)}
+                actual = lag_coincidence_spectrum(seq, max_lag=max_lag)
+                self.assertEqual(actual, expected, f"L={len(seq)}, max_lag={max_lag}")
 
 
 if __name__ == "__main__":
